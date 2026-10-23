@@ -57,7 +57,9 @@ export default function DayPage({ date }) {
         </p>
       </header>
 
-      {issue.podcasts.length > 0 && <Listen date={date} podcasts={issue.podcasts} />}
+      {(issue.podcasts.length > 0 || issue.links?.length > 0) && (
+        <Listen date={date} podcasts={issue.podcasts} links={issue.links || []} />
+      )}
 
       {data && (
         <>

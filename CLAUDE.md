@@ -4,21 +4,27 @@
 עונים בעברית. קובץ קוד לא עובר ~500 שורות.
 
 ## מה זה
-תקציר החדשות היומי שבוט של Grok מכין + 2–3 פרקי פודקאסט מ-NotebookLM, עמוד לכל יום,
-**נשמר 14 יום ונמחק אוטומטית**. קריאה פתוחה לכולם; העלאה/מחיקה — admin בלבד (Google).
+תקציר החדשות היומי שבוט של Grok מכין + 2–3 פרקי פודקאסט, עמוד לכל יום,
+**נשמר 14 יום ונמחק אוטומטית**. קריאה פתוחה לכולם.
+
+**הכול אוטומטי — המשתמש לא מנהל את זה.** גרוק (הצרכני, משימה יומית) מחובר כ-custom connector
+ל-`/mcp` עם `TACT_NEWS_PUBLISH_TOKEN` וקורא ל-`publish_newsletter` בעצמו. הפודקאסטים = קישורים
+לפרקים קיימים שגרוק בוחר (mp3 ישיר מתנגן באתר; Spotify/YouTube נפתחים בלשונית).
+הגדרת החיבור + הטוקן: `Aiprojects\env	act-news-grok.md` (מחוץ לריפו). `/admin` (Google) נשאר לתיקונים ידניים.
 
 - **חי:** https://tact-news.newavera.co.il — Mac mini, `~/server/tact-news`, פורט 8110, מנהרה ייעודית. פרטים: `deploy/DEPLOY.md`
 - **ריפו:** github.com/boazeng/tact-news (**ציבורי** — לא להכניס סודות)
 
 ## מבנה
-- `backend/` — FastAPI. `storage.py` (תיקייה לכל יום, retention), `api.py` (נתיבים), `media.py` (WAV→M4A ב-ffmpeg), `server.py` (auth + SPA)
+- `backend/` — FastAPI. `storage.py` (תיקייה לכל יום, retention, קישורי פודקאסט), `api.py` (נתיבים + `POST /api/publish`), `publish.py` (טוקן + לוגיקת פרסום משותפת), `mcp_server.py` (`/mcp`: publish_newsletter · add_podcast_links · get_status), `media.py` (WAV→M4A), `server.py` (auth + SPA)
 - `src/` — React/Vite RTL. `pages/DayPage` (הגיליון), `pages/AdminPage` (העלאה), `components/Player` (נגן גלובלי — זוכר מיקום ומהירות, Media Session)
-- `docs/GROK-PROMPT.md` — ההוראה לגרוק להפיק JSON. **מקור יחיד** — דף הניהול מייבא אותו (`?raw`)
+- `docs/GROK-PROMPT.md` — ההוראה לגרוק לפרסם לבד. **מקור יחיד** — דף הניהול מייבא אותו (`?raw`)
 - `samples/2026-10-23.json` — גיליון אמיתי בפורמט, לבדיקות
 
 ## נתונים
-`database/issues/YYYY-MM-DD/` → `newsletter.{json|html|pdf}` + `podcasts/` + `materials/`. אין DB מלבד `auth.db` (משתמשים).
-JSON של ניוזלטר: `{title, sections:[{name, color?, items:[{title, summary, details, source_url, source_name}]}], closing?, notebooklm?}` —
+`database/issues/YYYY-MM-DD/` → `newsletter.{json|html|pdf}` + `links.json` (פרקים מגרוק) + `podcasts/` (אודיו שהועלה) + `materials/`. אין DB מלבד `auth.db` (משתמשים).
+JSON של ניוזלטר: `{title, sections:[{name, color?, items:[{title, summary, details, source_url, source_name}]}], podcasts?, closing?, notebooklm?}` —
+`podcasts` (`[{title, url, show, duration_minutes, description}]`) נשלף ל-`links.json`;
 `notebooklm` (מחרוזת או `[{title,text}]`) נשלף לקובץ ב-`materials/` בזמן השמירה.
 
 ## פיתוח מקומי
@@ -33,3 +39,5 @@ npm run dev                                          # http://localhost:5335 (pr
 - `/api/*` ו-`/files/*` שלא קיימים מחזירים 404 JSON (לא index.html) — כדי שבדיקות בריאות לא ישקרו.
 - HTML שהועלה מוגש עם `CSP: sandbox` — בלי סקריפטים, גם בגישה ישירה.
 - מספרים/זמנים בתוך RTL מתהפכים ("1:00 / 0:01") — לעטוף ב-`dir="ltr"`.
+- מקומית: `pip install mcp` משדרג את starlette ל-1.x, ו-fastapi ישן (0.115) נופל ב-`on_startup` — לשדרג fastapi. בדוקר זה לא קורה.
+- גרוק מגיע ל-/mcp דרך ה-middleware של shared-auth — עובד כי `public_prefixes=("/",)`. אם האתר יינעל, להוסיף `/mcp` לרשימה.

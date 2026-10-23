@@ -1,14 +1,14 @@
 """נתיבי ה-API: קריאה ציבורית, העלאה ומחיקה למנהל בלבד."""
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from shared_auth import require_role
 
 from .media import maybe_transcode
-from .storage import (MEDIA_TYPES, RETENTION_DAYS, Storage, StorageError,
-                      safe_name, strip_code_fences, today)
+from .publish import publish, require_token
+from .storage import MEDIA_TYPES, RETENTION_DAYS, Storage, StorageError, safe_name, today
 
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024   # 1GB לקובץ — WAV ארוך עדיין נכנס
 
@@ -106,20 +106,22 @@ def build_router(storage: Storage) -> APIRouter:
             return {"ok": True, "name": guard(storage.save_text_material, day, body.title, text)}
         if body.kind != "newsletter":
             raise HTTPException(400, "סוג לא מוכר")
-        bare = strip_code_fences(text)
-        if bare.startswith("{"):
-            ext = ".json"
-        elif bare.lstrip().startswith("<"):
-            ext = ".html"
-        else:
-            raise HTTPException(400, "הניוזלטר צריך להיות JSON (או HTML)")
-        tmp = guard(storage.upload_tmp, day) / f"paste{ext}"
-        tmp.write_text(bare, encoding="utf-8")
+        return {"ok": True, "kind": guard(storage.publish_text, day, text)}
+
+    class Publish(BaseModel):
+        content: str | dict
+        date: str = ""
+        podcasts: list | None = None
+
+    @router.post("/api/publish")
+    def publish_rest(body: Publish, request: Request):
+        """פרסום אוטומטי (סקריפטים / בדיקות) — Authorization: Bearer <TACT_NEWS_PUBLISH_TOKEN>.
+        גרוק עצמו מפרסם דרך /mcp, עם אותו טוקן ואותה לוגיקה."""
+        require_token(request.headers.get("authorization"))
         try:
-            guard(storage.save_newsletter, day, tmp, ext)
-        finally:
-            tmp.unlink(missing_ok=True)
-        return {"ok": True, "kind": ext[1:]}
+            return publish(storage, body.content, body.date, body.podcasts)
+        except StorageError as e:
+            raise HTTPException(400, str(e)) from e
 
     @router.delete("/api/issues/{day}")
     def delete_day(day: str, _admin=admin):

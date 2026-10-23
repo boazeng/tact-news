@@ -93,3 +93,13 @@
   .mini-side { grid-area: side; }
   .mini-controls { grid-area: controls; }
 }
+
+/* ───────── links chosen by Grok ───────── */
+.ep-desc { font-size: 13px; color: var(--night-ink-2); margin-top: 2px; line-height: 1.45; }
+.ep-show { font-weight: 700; color: var(--night-ink); opacity: .85; margin-inline-end: 8px; }
+.ep-link { text-decoration: none; color: inherit; padding: 2px 0; }
+.ep-link:hover .ep-title { text-decoration: underline; text-underline-offset: 3px; }
+.ep-out { background: transparent; color: var(--night-ink); border: 1.5px solid rgb(255 255 255 / 0.35); text-decoration: none; }
+.ep-out:hover { border-color: var(--night-ink); }
+.is-link .ep-dur { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.3; }
+.ep-host { font-size: 11px; opacity: .75; }

@@ -1,7 +1,7 @@
 """TACT News — אתר החדשות היומי.
 
 1. מגיש את ה-SPA (dist/).
-2. API לגיליונות: ניוזלטר (JSON/HTML/PDF) + פרקי פודקאסט + חומר NotebookLM לכל יום.
+2. API לגיליונות + MCP ב-/mcp שדרכו גרוק מפרסם לבד: ניוזלטר (JSON/HTML/PDF) + פרקי פודקאסט + חומר NotebookLM לכל יום.
 3. כל יום נמחק אוטומטית אחרי RETENTION_DAYS (ברירת מחדל 14).
 4. כניסת Google (shared-auth): הקריאה פתוחה לכולם, ההעלאה והמחיקה — admin בלבד.
 """
@@ -31,6 +31,7 @@ from fastapi.responses import FileResponse  # noqa: E402
 from shared_auth import install_auth  # noqa: E402
 
 from .api import build_router  # noqa: E402
+from .mcp_server import install_mcp  # noqa: E402
 from .storage import Storage  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
@@ -57,7 +58,8 @@ async def _retention_loop():
 @asynccontextmanager
 async def lifespan(_app):
     task = asyncio.create_task(_retention_loop())
-    yield
+    async with mcp_lifespan():
+        yield
     task.cancel()
 
 
@@ -72,6 +74,7 @@ install_auth(
     public_prefixes=("/",),
 )
 app.include_router(build_router(storage))
+mcp_lifespan = install_mcp(app, storage)   # /mcp — גרוק מפרסם דרכו (Bearer TACT_NEWS_PUBLISH_TOKEN)
 
 
 # ───────────────── serve the built SPA ─────────────────

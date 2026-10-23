@@ -74,7 +74,7 @@ class Storage:
         for d in sorted(self.root.iterdir(), reverse=True):
             if d.is_dir() and _DATE_RE.match(d.name):
                 info = self.day_info(d.name)
-                if info["newsletter"] or info["podcasts"] or info["materials"]:
+                if info["newsletter"] or info["podcasts"] or info["materials"] or info["links"]:
                     days.append(_summary(info))
         return days
 
@@ -98,6 +98,7 @@ class Storage:
             "newsletter": newsletter,
             "podcasts": _list_files(base / "podcasts", day, "podcasts"),
             "materials": _list_files(base / "materials", day, "materials"),
+            "links": self.load_links(day),
         }
 
     # ───────── writing ─────────
@@ -110,6 +111,8 @@ class Storage:
         if ext == ".json":
             data = parse_newsletter_json(src.read_text(encoding="utf-8-sig"))
             self._extract_embedded_material(day, data)
+            if isinstance(data.get("podcasts"), list):
+                self.save_links(day, data.pop("podcasts"))
             src.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         for old in NEWSLETTER_EXTS:
             (base / f"newsletter{old}").unlink(missing_ok=True)
@@ -142,6 +145,38 @@ class Storage:
             for i, part in enumerate(material, 1):
                 if isinstance(part, dict) and str(part.get("text", "")).strip():
                     self.save_text_material(day, part.get("title") or f"חומר {i}", part["text"])
+
+    def publish_text(self, day: str, text: str) -> str:
+        """ניוזלטר כטקסט (JSON או HTML) — מהדבקה, מ-REST או מ-MCP. מחזיר את הסוג."""
+        bare = strip_code_fences(text or "")
+        if bare.startswith("{"):
+            ext = ".json"
+        elif bare.lstrip().startswith("<"):
+            ext = ".html"
+        else:
+            raise StorageError("הניוזלטר צריך להיות JSON (או HTML)")
+        tmp = self.upload_tmp(day) / f"paste{ext}"
+        tmp.write_text(bare, encoding="utf-8")
+        try:
+            self.save_newsletter(day, tmp, ext)
+        finally:
+            tmp.unlink(missing_ok=True)
+        return ext[1:]
+
+    # ───────── podcast links ─────────
+    def load_links(self, day: str) -> list[dict]:
+        p = self.day_dir(day) / "links.json"
+        try:
+            return json.loads(p.read_text(encoding="utf-8")) if p.is_file() else []
+        except (OSError, ValueError):
+            return []
+
+    def save_links(self, day: str, links: list) -> int:
+        """מחליף את רשימת קישורי הפודקאסט של היום. מחזיר כמה נשמרו."""
+        clean = [parse_link(x) for x in links]
+        (self.day_dir(day, create=True) / "links.json").write_text(
+            json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+        return len(clean)
 
     def delete_day(self, day: str) -> None:
         shutil.rmtree(self.day_dir(day), ignore_errors=True)
@@ -214,6 +249,28 @@ def parse_newsletter_json(text: str) -> dict:
     return data
 
 
+def parse_link(x) -> dict:
+    """קישור לפרק: {title, url, show?, description?, duration_minutes?}. audio=True אם זה קובץ אודיו ישיר."""
+    if not isinstance(x, dict) or not str(x.get("title", "")).strip():
+        raise StorageError('לכל פרק צריך "title"')
+    url = str(x.get("url", "")).strip()
+    if not re.match(r"^https?://", url):
+        raise StorageError(f'קישור לא תקין בפרק "{x["title"]}"')
+    try:
+        minutes = float(x.get("duration_minutes") or 0) or None
+    except (TypeError, ValueError):
+        minutes = None
+    path = url.split("?")[0].lower()
+    return {
+        "title": str(x["title"]).strip()[:200],
+        "url": url,
+        "show": str(x.get("show") or "").strip()[:120],
+        "description": str(x.get("description") or "").strip()[:600],
+        "duration_minutes": minutes,
+        "audio": path.endswith(AUDIO_EXTS),
+    }
+
+
 def _list_files(folder: Path, day: str, kind: str) -> list[dict]:
     if not folder.is_dir():
         return []
@@ -234,6 +291,6 @@ def _summary(info: dict) -> dict:
         "title": data.get("title") or "",
         "newsletter": nl.get("kind"),
         "items": items,
-        "podcasts": len(info["podcasts"]),
+        "podcasts": len(info["podcasts"]) + len(info["links"]),
         "materials": len(info["materials"]),
     }

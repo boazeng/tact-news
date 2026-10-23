@@ -1,0 +1,8 @@
+fastapi>=0.115
+starlette>=0.40        # FileResponse עם Range — דילוג בתוך פרק אודיו
+uvicorn[standard]>=0.30
+python-dotenv>=1.0
+python-multipart>=0.0.9
+tzdata                 # Asia/Jerusalem בתוך python:slim
+# Google sign-in + roles (pulls httpx, itsdangerous, fastapi)
+shared-auth @ git+https://github.com/boazeng/shared-auth.git

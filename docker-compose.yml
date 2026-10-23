@@ -1,0 +1,35 @@
+# Mac mini (OrbStack) + מנהרת Cloudflare ייעודית כ-sidecar —
+# בלי sudo ובלי לגעת במנהרה המשותפת. ראה deploy/DEPLOY.md.
+services:
+  tact-news:
+    build: .
+    container_name: tact-news
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8110:8000"     # localhost only — לבדיקות מהמק עצמו
+    volumes:
+      - ./database:/app/database  # issues/ (גיליונות + אודיו) + auth.db
+    # סודות בלבד (chmod 600, לעולם לא ב-git):
+    #   GOOGLE_OAUTH_CLIENT_ID · GOOGLE_OAUTH_CLIENT_SECRET · AUTH_SESSION_SECRET · AUTH_EMERGENCY_TOKEN
+    env_file:
+      - .env
+    environment:
+      AUTH_REDIRECT_URI: https://tact-news.newavera.co.il/auth/callback
+      AUTH_SUPER_ADMIN_EMAIL: boazen@gmail.com
+      RETENTION_DAYS: "14"
+      TZ: Asia/Jerusalem
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: tact-news-tunnel
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./tunnel:/etc/cloudflared:ro    # creds.json + config.yml — gitignored
+    depends_on:
+      - tact-news

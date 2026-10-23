@@ -271,11 +271,17 @@ def parse_link(x) -> dict:
     }
 
 
+def _display_title(stem: str) -> str:
+    """"0 תקציר קולי" → "תקציר קולי": המספר בתחילת השם קובע רק את הסדר בנגן."""
+    title = " ".join(stem.replace("_", " ").split())
+    return re.sub(r"^\d{1,2}\s*[-.)]?\s+", "", title) or title
+
+
 def _list_files(folder: Path, day: str, kind: str) -> list[dict]:
     if not folder.is_dir():
         return []
     return [
-        {"name": p.name, "title": " ".join(p.stem.replace("_", " ").split()), "size": p.stat().st_size,
+        {"name": p.name, "title": _display_title(p.stem), "size": p.stat().st_size,
          "ext": p.suffix.lower()[1:], "url": file_url(day, kind, p.name)}
         for p in sorted(folder.iterdir()) if p.is_file()
     ]

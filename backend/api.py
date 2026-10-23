@@ -7,7 +7,8 @@ from pydantic import BaseModel
 from shared_auth import require_role
 
 from .media import maybe_transcode
-from .publish import publish, require_token
+from . import audio_intake
+from .publish import publish, require_token, resolve_date
 from .storage import MEDIA_TYPES, RETENTION_DAYS, Storage, StorageError, safe_name, today
 
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024   # 1GB לקובץ — WAV ארוך עדיין נכנס
@@ -120,6 +121,17 @@ def build_router(storage: Storage) -> APIRouter:
         require_token(request.headers.get("authorization"))
         try:
             return publish(storage, body.content, body.date, body.podcasts)
+        except StorageError as e:
+            raise HTTPException(400, str(e)) from e
+
+    @router.post("/api/publish/audio")
+    def publish_audio(request: Request, file: UploadFile = File(...), title: str = Form(""),
+                      date: str = Form("")):
+        """העלאת קובץ אודיו עם טוקן הפרסום (multipart: file, title, date)."""
+        require_token(request.headers.get("authorization"))
+        try:
+            day = resolve_date(storage, date, None)
+            return audio_intake.save_upload(storage, day, file.file, file.filename or "audio.mp3", title)
         except StorageError as e:
             raise HTTPException(400, str(e)) from e
 

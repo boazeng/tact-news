@@ -16,7 +16,7 @@
 - **ריפו:** github.com/boazeng/tact-news (**ציבורי** — לא להכניס סודות)
 
 ## מבנה
-- `backend/` — FastAPI. `storage.py` (תיקייה לכל יום, retention, קישורי פודקאסט), `api.py` (נתיבים + `POST /api/publish`), `publish.py` (טוקן + לוגיקת פרסום משותפת), `mcp_server.py` (`/mcp`: publish_newsletter · add_podcast_links · get_status), `media.py` (WAV→M4A), `server.py` (auth + SPA)
+- `backend/` — FastAPI. `storage.py` (תיקייה לכל יום, retention, קישורי פודקאסט), `api.py` (נתיבים + `POST /api/publish`), `publish.py` (טוקן + לוגיקת פרסום משותפת), `mcp_server.py` (`/mcp`: publish_newsletter · add_podcast_links · upload_audio_from_url · upload_audio_base64 · get_status), `audio_intake.py` (אודיו מגרוק: URL / base64 בחתיכות / `POST /api/publish/audio`; חוסם כתובות פנימיות), `media.py` (WAV→M4A), `server.py` (auth + SPA)
 - `src/` — React/Vite RTL. `pages/DayPage` (הגיליון), `pages/AdminPage` (העלאה), `components/Player` (נגן גלובלי — זוכר מיקום ומהירות, Media Session)
 - `docs/GROK-PROMPT.md` — ההוראה לגרוק לפרסם לבד. **מקור יחיד** — דף הניהול מייבא אותו (`?raw`)
 - `samples/2026-10-23.json` — גיליון אמיתי בפורמט, לבדיקות
@@ -41,3 +41,4 @@ npm run dev                                          # http://localhost:5335 (pr
 - מספרים/זמנים בתוך RTL מתהפכים ("1:00 / 0:01") — לעטוף ב-`dir="ltr"`.
 - מקומית: `pip install mcp` משדרג את starlette ל-1.x, ו-fastapi ישן (0.115) נופל ב-`on_startup` — לשדרג fastapi. בדוקר זה לא קורה.
 - גרוק מגיע ל-/mcp דרך ה-middleware של shared-auth — עובד כי `public_prefixes=("/",)`. אם האתר יינעל, להוסיף `/mcp` לרשימה.
+- אודיו מגרוק: לא ידוע איזו משלוש הדרכים עובדת אצלו בפועל — base64 של קובץ גדול כנראה מעבר ליכולת של מודל. קידומת `0 ` בכותרת = ראשון בנגן, ולא מוצגת.

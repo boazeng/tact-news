@@ -11,6 +11,7 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
+from . import audio_intake
 from .publish import add_podcasts, publish, resolve_date, token_ok
 from .storage import Storage, StorageError
 
@@ -61,6 +62,23 @@ def build_mcp(storage: Storage) -> MCPServer:
     def add_podcast_links(ctx: Context, podcasts_json: str, date: str = "") -> dict[str, Any]:
         return call(ctx, add_podcasts, storage, podcasts_json, date)
 
+    @server.tool(description=(
+        "Upload an audio file (voice brief / NotebookLM episode) by giving a DIRECT public link to the file "
+        "(.mp3/.m4a/.wav). The server downloads it and it plays in the site's player for that day. "
+        "A notebooklm.google.com page link will NOT work (it is a login page, not a file). "
+        "title = the episode title in Hebrew (start with '0 ' for the voice brief so it is listed first). date defaults to today."))
+    def upload_audio_from_url(ctx: Context, url: str, title: str, date: str = "") -> dict[str, Any]:
+        return call(ctx, lambda: audio_intake.from_url(storage, resolve_date(storage, date, None), url, title))
+
+    @server.tool(description=(
+        "Upload an audio file you hold (voice brief / NotebookLM episode) as base64, in chunks of up to 4MB of base64 each. "
+        "Use the same upload_id for all chunks of one file, index 0..total-1 in order. The file is saved after the last chunk. "
+        "filename = original name with extension (e.g. brief.mp3). title = episode title in Hebrew. date defaults to today."))
+    def upload_audio_base64(ctx: Context, upload_id: str, index: int, total: int, data_base64: str,
+                            title: str, filename: str = "audio.mp3", date: str = "") -> dict[str, Any]:
+        return call(ctx, lambda: audio_intake.base64_chunk(
+            storage, resolve_date(storage, date, None), upload_id, index, total, data_base64, title, filename))
+
     @server.tool(description="What the site has for a date (default today): item count, podcast links, plus the list of all days on the site.")
     def get_status(ctx: Context, date: str = "") -> dict[str, Any]:
         def status():
@@ -72,6 +90,7 @@ def build_mcp(storage: Storage) -> MCPServer:
                 "published": bool(info["newsletter"]),
                 "items": sum(len(s.get("items", [])) for s in data.get("sections", [])),
                 "podcast_links": [link["title"] for link in info["links"]],
+                "audio_files": [p["title"] for p in info["podcasts"]],
                 "days_on_site": [d["date"] for d in storage.list_days()],
                 "url": f"https://tact-news.newavera.co.il/d/{day}",
             }

@@ -10,7 +10,7 @@
 **הכול אוטומטי — המשתמש לא מנהל את זה.** גרוק (הצרכני, משימה יומית) מחובר כ-custom connector
 ל-`/mcp` עם `TACT_NEWS_PUBLISH_TOKEN` וקורא ל-`publish_newsletter` בעצמו. הפודקאסטים = קישורים
 לפרקים קיימים שגרוק בוחר (mp3 ישיר מתנגן באתר; Spotify/YouTube נפתחים בלשונית).
-הגדרת החיבור + הטוקן: `Aiprojects\env	act-news-grok.md` (מחוץ לריפו). `/admin` (Google) נשאר לתיקונים ידניים.
+הגדרת החיבור + הטוקן: `Aiprojects\env\tact-news-grok.md` (מחוץ לריפו). `/admin` (Google) נשאר לתיקונים ידניים.
 
 - **חי:** https://tact-news.newavera.co.il — Mac mini, `~/server/tact-news`, פורט 8110, מנהרה ייעודית. פרטים: `deploy/DEPLOY.md`
 - **ריפו:** github.com/boazeng/tact-news (**ציבורי** — לא להכניס סודות)

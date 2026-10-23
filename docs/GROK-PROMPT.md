@@ -40,7 +40,7 @@
 4. **אודיו (התקציר הקולי ופרקים מ-NotebookLM)** — כדי שיתנגן ישר מהאתר, העלה את הקובץ עצמו. קישור לדף של NotebookLM לא יעבוד, כי זה דף שדורש התחברות ולא קובץ. יש שלוש דרכים, השתמש בראשונה שעובדת אצלך:
    - `upload_audio_from_url` — אם יש לך קישור ציבורי **ישיר** לקובץ (mp3/m4a/wav).
    - `upload_audio_base64` — אם הקובץ אצלך: שלח אותו כ-base64 בחתיכות של עד 4MB, עם אותו `upload_id`, `index` מ-0 ו-`total`.
-   - `POST https://tact-news.newavera.co.il/api/publish/audio` — אם יש לך סביבת קוד: multipart עם `file`, `title`, `date`, וכותרת `Authorization: Bearer` עם אותו טוקן של החיבור.
+   - `POST https://tact-news.newavera.co.il/api/publish/audio` — אם יש לך סביבת קוד: multipart עם `file`, `title`, `date`, וכותרת `Authorization: Bearer` עם אותו טוקן של החיבור. הוסף גם כותרת `User-Agent` כלשהי (למשל `grok-news`), אחרת Cloudflare חוסם ב-403.
    לתקציר הקולי תן כותרת שמתחילה ב-"0 " (למשל "0 תקציר קולי") כדי שיופיע ראשון. אם אף דרך לא עבדה — שים את קישור ה-NotebookLM ב-`podcasts` ואמור לבועז מה נכשל.
 5. בדוק שהתשובה של הכלי היא `"ok": true`. אם הכלי מחזיר שגיאה, תקן את ה-JSON ונסה שוב.
 6. בסוף ההודעה שלך הוסף שורה אחת: "פורסם לאתר" עם הקישור שהכלי החזיר.

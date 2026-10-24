@@ -13,8 +13,9 @@ from .storage import Storage, StorageError
 logger = logging.getLogger("tact-news")
 
 TOPICS = [
-    {"id": "ai", "name": "בינה מלאכותית"},
-    # {"id": "sport", "name": "ספורט"},
+    {"id": "ai", "name": "בינה מלאכותית", "color": "#6d28d9"},
+    {"id": "tech", "name": "טכנולוגיה", "color": "#0b72b9"},
+    # {"id": "sport", "name": "ספורט", "color": "#15803d"},
     # {"id": "politics", "name": "פוליטיקה"},
 ]
 DEFAULT_TOPIC = TOPICS[0]["id"]

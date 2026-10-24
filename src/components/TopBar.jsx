@@ -72,7 +72,7 @@ function TopicPicker({ topics, topic, onPick }) {
         aria-expanded={many ? open : undefined}
         title="תחום"
       >
-        <span className="topic-dot" aria-hidden="true" />
+        <span className="topic-dot" aria-hidden="true" style={current?.color ? { background: current.color } : undefined} />
         {current?.name || topic}
         {many && <span className="topic-chev" aria-hidden="true">⌄</span>}
       </button>
@@ -85,6 +85,7 @@ function TopicPicker({ topics, topic, onPick }) {
                 className={t.id === topic ? 'is-on' : ''}
                 onClick={() => { setOpen(false); onPick(t.id) }}
               >
+                <span className="topic-dot" aria-hidden="true" style={t.color ? { background: t.color } : undefined} />
                 {t.name}
               </button>
             </li>

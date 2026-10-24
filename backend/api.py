@@ -43,21 +43,23 @@ def build_router(topics: Topics) -> APIRouter:
         name: str
         color: str = ""
         description: str = ""
+        tabs: list[str] | None = None
 
     @router.post("/api/topics")
     def add_topic(body: NewTopic, _admin=admin):
         """תחום על חדש — מופיע מיד באתר, באפליקציה ובכלי של גרוק."""
-        guard(topics.add, body.id, body.name, body.color, body.description)
+        guard(topics.add, body.id, body.name, body.color, body.description, body.tabs)
         return {"ok": True, "topics": topics.listing()}
 
     class TopicEdit(BaseModel):
         name: str
         color: str = ""
         description: str = ""
+        tabs: list[str] | None = None
 
     @router.patch("/api/topics/{tid}")
     def edit_topic(tid: str, body: TopicEdit, _admin=admin):
-        guard(topics.update, tid, body.name, body.color, body.description)
+        guard(topics.update, tid, body.name, body.color, body.description, body.tabs)
         return {"ok": True, "topics": topics.listing()}
 
     class TopicOrder(BaseModel):

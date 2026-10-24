@@ -70,7 +70,8 @@ def build_mcp(topics: Topics) -> MCPServer:
             raise ToolError(f"[400] {e}") from None
 
     @server.tool(description=(
-        "The topics (תחומי על) on the site — id, name, and description = what to cover in that topic. "
+        "The topics (תחומי על) on the site — id, name, description = what to cover, and tabs = which parts to "
+        "fill for that topic (newsletter, podcasts, youtube, guides, papers). Fill ONLY the listed tabs. "
         "The list is managed on the site and can change: call this every morning and publish a full day for each "
         "topic (topic argument = its id). The first topic is the default. In a description, **text** marks what is "
         "important and ==text== marks top priority — give those parts more weight."))

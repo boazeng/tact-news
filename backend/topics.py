@@ -28,6 +28,8 @@ SEED = [
 LEGACY_TOPIC = "ai"   # לשם הועברו הימים מלפני התחומים, ולשם מפנות כתובות /files ישנות
 
 MAX_DESCRIPTION = 1500
+# הלשוניות שאפשר להפעיל בכל תחום. tabs של תחום = מה גרוק ממלא בו ומה מוצג באתר.
+TAB_IDS = ("newsletter", "podcasts", "youtube", "guides", "papers")
 _ID_RE = re.compile(r"^[a-z][a-z0-9-]{1,23}$")
 _COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 _DATE_DIR = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -58,10 +60,11 @@ class Topics:
         return list(self._stores.values())
 
     def listing(self) -> list[dict]:
-        return [dict(t, default=i == 0) for i, t in enumerate(self._list)]
+        return [dict(t, default=i == 0, tabs=t.get("tabs") or list(TAB_IDS)) for i, t in enumerate(self._list)]
 
     # ───────── ניהול ─────────
-    def add(self, tid: str, name: str, color: str = "", description: str = "") -> dict:
+    def add(self, tid: str, name: str, color: str = "", description: str = "",
+            tabs: list[str] | None = None) -> dict:
         tid = (tid or "").strip().lower()
         name = (name or "").strip()
         if not _ID_RE.match(tid):
@@ -72,26 +75,29 @@ class Topics:
             raise StorageError("צריך שם לתחום (עד 40 תווים)")
         if color and not _COLOR_RE.match(color):
             raise StorageError("צבע בפורמט #RRGGBB")
+        tabs = _clean_tabs(tabs)
         with self._lock:
             if any(t["id"] == tid for t in self._list):
                 raise StorageError(f'כבר יש תחום עם המזהה "{tid}"')
             if any(t["name"] == name for t in self._list):
                 raise StorageError(f'כבר יש תחום בשם "{name}"')
             topic = {"id": tid, "name": name, "color": color or "#475569",
-                     "description": (description or "").strip()[:MAX_DESCRIPTION]}
+                     "description": (description or "").strip()[:MAX_DESCRIPTION], "tabs": tabs}
             self._list.append(topic)
             self._save()
             self._stores[tid] = Storage(self.data_dir, tid)
         logger.info("נוסף תחום %s (%s)", tid, name)
         return topic
 
-    def update(self, tid: str, name: str, color: str = "", description: str = "") -> dict:
-        """עריכת שם, צבע ותיאור. המזהה לא משתנה — הכתובות והימים השמורים קשורים אליו."""
+    def update(self, tid: str, name: str, color: str = "", description: str = "",
+               tabs: list[str] | None = None) -> dict:
+        """עריכת שם, צבע, תיאור ולשוניות. המזהה לא משתנה — הכתובות והימים השמורים קשורים אליו."""
         name = (name or "").strip()
         if not name or len(name) > 40:
             raise StorageError("צריך שם לתחום (עד 40 תווים)")
         if color and not _COLOR_RE.match(color):
             raise StorageError("צבע בפורמט #RRGGBB")
+        clean_tabs = _clean_tabs(tabs) if tabs is not None else None
         with self._lock:
             topic = next((t for t in self._list if t["id"] == tid), None)
             if not topic:
@@ -100,6 +106,8 @@ class Topics:
                 raise StorageError(f'כבר יש תחום בשם "{name}"')
             topic.update(name=name, color=color or topic.get("color") or "#475569",
                          description=(description or "").strip()[:MAX_DESCRIPTION])
+            if clean_tabs is not None:
+                topic["tabs"] = clean_tabs
             self._save()
         return topic
 
@@ -141,6 +149,19 @@ class Topics:
         tmp = self.file.with_suffix(".tmp")
         tmp.write_text(json.dumps(self._list, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(self.file)
+
+
+def _clean_tabs(tabs: list[str] | None) -> list[str]:
+    """None → כל הלשוניות. אחרת — רק מוכרות, בסדר הקבוע, ולפחות אחת."""
+    if tabs is None:
+        return list(TAB_IDS)
+    unknown = [t for t in tabs if t not in TAB_IDS]
+    if unknown:
+        raise StorageError(f"לשונית לא מוכרת: {', '.join(unknown)}")
+    clean = [t for t in TAB_IDS if t in tabs]
+    if not clean:
+        raise StorageError("צריך לבחור לפחות לשונית אחת")
+    return clean
 
 
 def _migrate_legacy(root: Path) -> None:

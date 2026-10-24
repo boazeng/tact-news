@@ -1,13 +1,18 @@
 import { useRef, useState } from 'react'
 import { renderMarks, toggleWrap } from '../../lib/marks.jsx'
+import { TABS } from '../../lib/routes.js'
 
 export const SWATCHES = ['#6d28d9', '#0b72b9', '#15803d', '#c62828', '#a8500a', '#0f766e', '#be185d', '#475569']
 
 // טופס תחום — להוספה (עם מזהה) ולעריכה (המזהה קבוע). התיאור תומך בהדגשה ובסימון.
 export default function TopicForm({ initial, isNew, onSubmit, onCancel, submitLabel }) {
   const [form, setForm] = useState(() => ({
-    id: '', name: '', color: SWATCHES[2], description: '', ...initial,
+    id: '', name: '', color: SWATCHES[2], description: '', tabs: TABS.map((t) => t.id), ...initial,
   }))
+  const toggleTab = (id) => setForm({
+    ...form,
+    tabs: form.tabs.includes(id) ? form.tabs.filter((t) => t !== id) : [...form.tabs, id],
+  })
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
   const area = useRef(null)
@@ -26,7 +31,7 @@ export default function TopicForm({ initial, isNew, onSubmit, onCancel, submitLa
     setMsg('')
     try {
       await onSubmit(form)
-      if (isNew) setForm({ id: '', name: '', color: SWATCHES[2], description: '' })
+      if (isNew) setForm({ id: '', name: '', color: SWATCHES[2], description: '', tabs: TABS.map((t) => t.id) })
     } catch (err) {
       setMsg(err.message)
     } finally {
@@ -73,6 +78,16 @@ export default function TopicForm({ initial, isNew, onSubmit, onCancel, submitLa
           <p className="rich-preview">{renderMarks(form.description)}</p>
         )}
       </div>
+
+      <fieldset className="tab-checks">
+        <legend>מה גרוק ממלא בתחום הזה</legend>
+        {TABS.map((t) => (
+          <label key={t.id} className={`tab-check${form.tabs.includes(t.id) ? ' is-on' : ''}`}>
+            <input type="checkbox" checked={form.tabs.includes(t.id)} onChange={() => toggleTab(t.id)} />
+            {t.label}
+          </label>
+        ))}
+      </fieldset>
 
       <div className="swatches" role="radiogroup" aria-label="צבע">
         {SWATCHES.map((c) => (

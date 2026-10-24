@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { addTopic, deleteTopic, editTopic, orderTopics } from '../../lib/api.js'
 import { renderMarks } from '../../lib/marks.jsx'
+import { TABS } from '../../lib/routes.js'
 import TopicForm from './TopicForm.jsx'
 
 // תחומי על: סדר, עריכה, הוספה ומחיקה. כל שינוי מופיע מיד באתר ובאפליקציה,
@@ -46,11 +47,11 @@ export default function TopicsManager({ topics, onChanged }) {
           <li key={t.id} className={`topic-row${editing === t.id ? ' is-editing' : ''}`}>
             {editing === t.id ? (
               <TopicForm
-                initial={{ id: t.id, name: t.name, color: t.color, description: t.description || '' }}
+                initial={{ id: t.id, name: t.name, color: t.color, description: t.description || '', tabs: t.tabs }}
                 submitLabel="שמירה"
                 onCancel={() => setEditing(null)}
                 onSubmit={async (f) => {
-                  await editTopic(t.id, { name: f.name, color: f.color, description: f.description })
+                  await editTopic(t.id, { name: f.name, color: f.color, description: f.description, tabs: f.tabs })
                   setEditing(null)
                   setMsg(`התחום "${f.name}" עודכן ✓`)
                   onChanged()
@@ -72,6 +73,11 @@ export default function TopicsManager({ topics, onChanged }) {
                     {t.default && <span className="tag">ברירת מחדל</span>}
                   </div>
                   {t.description && <p className="topic-desc">{renderMarks(t.description)}</p>}
+                  <div className="topic-tabs">
+                    {TABS.filter((x) => (t.tabs || []).includes(x.id)).map((x) => (
+                      <span key={x.id} className="tag">{x.label}</span>
+                    ))}
+                  </div>
                 </div>
                 <span className="row-actions">
                   <button className="link-btn" onClick={() => { setEditing(t.id); setArming(null) }}>עריכה</button>

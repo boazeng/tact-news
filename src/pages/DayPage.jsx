@@ -9,7 +9,7 @@ import PapersView from '../components/PapersView.jsx'
 import YoutubeView from '../components/YoutubeView.jsx'
 
 // יום אחד בתחום אחד: כותרת התאריך + לשוניות (ניוזלטר · פודקאסטים · YouTube · מדריכים · מאמרים)
-export default function DayPage({ topic, topicName, date, tab, today, latest, navigate }) {
+export default function DayPage({ topic, topicName, enabledTabs, date, tab: wanted, today, latest, navigate }) {
   const [issue, setIssue] = useState(null)
   const [error, setError] = useState('')
 
@@ -58,12 +58,15 @@ export default function DayPage({ topic, topicName, date, tab, today, latest, na
     guides: (issue.guides || []).length,
     papers: (issue.papers || []).length,
   }
+  // לשוניות התחום (מוגדרות בדף הניהול) + כל לשונית שכבר יש בה תוכן — שלא ייעלם תוכן קיים
+  const shown = TABS.filter((t) => !enabledTabs || enabledTabs.includes(t.id) || counts[t.id] > 0)
+  const tab = shown.some((t) => t.id === wanted) ? wanted : shown[0]?.id
 
   return (
     <div className="page">
       {head}
       <nav className="tabs" aria-label="לשוניות">
-        {TABS.map((t) => (
+        {shown.map((t) => (
           <a
             key={t.id}
             href={dayPath(topic, date, t.id)}

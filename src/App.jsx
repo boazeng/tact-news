@@ -74,8 +74,8 @@ export default function App() {
         )}
         {route.page === 'day' && topicInfo && issues !== null && (
           <DayPage
-            key={`${topic}/${date}`} topic={topic} topicName={topicInfo.name}
-            date={date} tab={tab} today={today} latest={latest} navigate={navigate}
+            key={`${topic}/${date}`} topic={topic} topicName={topicInfo.name} enabledTabs={topicInfo.tabs}
+            date={date} tab={route.tab} today={today} latest={latest} navigate={navigate}
           />
         )}
       </main>

@@ -5,6 +5,7 @@
         podcasts/<קבצי אודיו> + links.json + materials/      ← לשונית "פודקאסטים"
         youtube.json                                          ← לשונית "YouTube"
         guides.json                                           ← לשונית "מדריכים" (גם YouTube)
+        papers.json                                           ← לשונית "מאמרים" (מאמרים אקדמיים)
 """
 import json
 import os
@@ -105,6 +106,7 @@ class Storage:
             "links": self.load_list(day, "links"),
             "youtube": self.load_list(day, "youtube"),
             "guides": self.load_list(day, "guides"),
+            "papers": self.load_list(day, "papers"),
         }
 
     # ───────── writing ─────────
@@ -120,7 +122,7 @@ class Storage:
             # רשימות שגרוק שולח בתוך הניוזלטר → ללשוניות שלהן
             if isinstance(data.get("podcasts"), list):
                 self.save_list(day, "links", data.pop("podcasts"))
-            for which in ("youtube", "guides"):
+            for which in ("youtube", "guides", "papers"):
                 if isinstance(data.get(which), list):
                     self.save_list(day, which, data.pop(which))
             src.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -173,7 +175,7 @@ class Storage:
             tmp.unlink(missing_ok=True)
         return ext[1:]
 
-    # ───────── link lists: links (פרקי פודקאסט) · youtube (סרטונים) · guides (מדריכים) ─────────
+    # ───────── link lists: links (פרקי פודקאסט) · youtube · guides (מדריכים) · papers (מאמרים) ─────────
     def load_list(self, day: str, which: str) -> list[dict]:
         p = self.day_dir(day) / f"{which}.json"
         try:
@@ -183,7 +185,7 @@ class Storage:
 
     def save_list(self, day: str, which: str, items: list) -> int:
         """מחליף את הרשימה של היום. מחזיר כמה נשמרו."""
-        parse = {"links": parse_link, "youtube": parse_video, "guides": parse_video}[which]
+        parse = {"links": parse_link, "youtube": parse_video, "guides": parse_video, "papers": parse_paper}[which]
         clean = [parse(x) for x in items]
         (self.day_dir(day, create=True) / f"{which}.json").write_text(
             json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -230,7 +232,7 @@ def file_url(topic: str, day: str, kind: str, name: str) -> str:
 
 
 def has_content(info: dict) -> bool:
-    return any(info[k] for k in ("newsletter", "podcasts", "materials", "links", "youtube", "guides"))
+    return any(info[k] for k in ("newsletter", "podcasts", "materials", "links", "youtube", "guides", "papers"))
 
 
 def safe_name(name: str) -> str:
@@ -324,6 +326,38 @@ def parse_video(x) -> dict:
     }
 
 
+_ARXIV_ABS = re.compile(r"^https?://(?:www\.)?arxiv\.org/abs/([\w.\-/]+?)(?:v\d+)?/?$")
+
+
+def _text(x: dict, key: str, limit: int) -> str:
+    return str(x.get(key) or "").strip()[:limit]
+
+
+def parse_paper(x) -> dict:
+    """מאמר אקדמי: {title, url, authors?, venue?, published?, summary?, details?, pdf_url?}."""
+    if not isinstance(x, dict) or not str(x.get("title", "")).strip():
+        raise StorageError('לכל מאמר צריך "title"')
+    url = str(x.get("url", "")).strip()
+    if not re.match(r"^https?://", url):
+        raise StorageError(f'קישור לא תקין במאמר "{x["title"]}"')
+    pdf = str(x.get("pdf_url") or "").strip()
+    if not pdf and (m := _ARXIV_ABS.match(url)):
+        pdf = f"https://arxiv.org/pdf/{m.group(1)}"
+    authors = x.get("authors") or ""
+    if isinstance(authors, list):
+        authors = ", ".join(str(a).strip() for a in authors if str(a).strip())
+    return {
+        "title": _text(x, "title", 300),
+        "url": url,
+        "pdf_url": pdf if re.match(r"^https?://", pdf) else "",
+        "authors": str(authors).strip()[:300],
+        "venue": _text(x, "venue", 120),
+        "published": _text(x, "published", 40),
+        "summary": _text(x, "summary", 1200),
+        "details": _text(x, "details", 4000),
+    }
+
+
 def _display_title(stem: str) -> str:
     """"0 תקציר קולי" → "תקציר קולי": המספר בתחילת השם קובע רק את הסדר בנגן."""
     title = " ".join(stem.replace("_", " ").split())
@@ -354,4 +388,5 @@ def _summary(info: dict) -> dict:
         "materials": len(info["materials"]),
         "youtube": len(info["youtube"]),
         "guides": len(info["guides"]),
+        "papers": len(info["papers"]),
     }

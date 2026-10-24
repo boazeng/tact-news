@@ -18,11 +18,11 @@
 ## תחומי על ולשוניות
 - **תחום על** (`backend/topics.py` → `TOPICS`): לכל תחום ימים משלו. כרגע רק `ai`. תחום חדש = שורה אחת שם.
   כתובות: `/<topic>/<date>[/podcasts|/youtube]`; `/` = תחום ברירת המחדל + היום; `/d/<date>` ישן → `ai`.
-- **לשוניות ביום:** ניוזלטר (ברירת מחדל) · פודקאסטים (אודיו + `links.json` + materials) · YouTube (`youtube.json`, מתנגן ב-youtube-nocookie) · מדריכים (`guides.json`, אותו פורמט ואותה תצוגה, רשימה נפרדת).
+- **לשוניות ביום:** ניוזלטר (ברירת מחדל) · פודקאסטים (אודיו + `links.json` + materials) · YouTube (`youtube.json`, מתנגן ב-youtube-nocookie) · מדריכים (`guides.json`, אותו פורמט ואותה תצוגה, רשימה נפרדת) · מאמרים (`papers.json`, מאמרים אקדמיים; ל-arXiv נוצר קישור PDF אוטומטית).
 - כל נתיב API מקבל `?topic=`; כל כלי MCP מקבל `topic`. נתונים מלפני התחומים הועברו אוטומטית ל-`issues/ai/` בעלייה.
 
 ## מבנה
-- `backend/` — FastAPI. `storage.py` (תיקייה לכל יום, retention, קישורי פודקאסט), `api.py` (נתיבים + `POST /api/publish`), `publish.py` (טוקן + לוגיקת פרסום משותפת), `mcp_server.py` (`/mcp`: list_topics · publish_newsletter · add_podcast_links · add_youtube_links · add_guide_links · upload_audio_from_url · upload_audio_base64 · get_status), `topics.py` (תחומי על + הגירה), `audio_intake.py` (אודיו מגרוק: URL / base64 בחתיכות / `POST /api/publish/audio`; חוסם כתובות פנימיות), `media.py` (WAV→M4A), `server.py` (auth + SPA)
+- `backend/` — FastAPI. `storage.py` (תיקייה לכל יום, retention, קישורי פודקאסט), `api.py` (נתיבים + `POST /api/publish`), `publish.py` (טוקן + לוגיקת פרסום משותפת), `mcp_server.py` (`/mcp`: list_topics · publish_newsletter · add_podcast_links · add_youtube_links · add_guide_links · add_papers · upload_audio_from_url · upload_audio_base64 · get_status), `topics.py` (תחומי על + הגירה), `audio_intake.py` (אודיו מגרוק: URL / base64 בחתיכות / `POST /api/publish/audio`; חוסם כתובות פנימיות), `media.py` (WAV→M4A), `server.py` (auth + SPA)
 - `src/` — React/Vite RTL. `pages/DayPage` (הגיליון), `pages/AdminPage` (העלאה), `components/Player` (נגן גלובלי — זוכר מיקום ומהירות, Media Session)
 - `docs/GROK-PROMPT.md` — ההוראה לגרוק לפרסם לבד. **מקור יחיד** — דף הניהול מייבא אותו (`?raw`)
 - `samples/2026-10-23.json` — גיליון אמיתי בפורמט, לבדיקות

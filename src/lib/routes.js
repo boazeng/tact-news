@@ -5,6 +5,7 @@ export const TABS = [
   { id: 'podcasts', label: 'פודקאסטים' },
   { id: 'youtube', label: 'YouTube' },
   { id: 'guides', label: 'מדריכים' },
+  { id: 'papers', label: 'מאמרים' },
 ]
 const TAB_IDS = TABS.map((t) => t.id)
 const DATE = /^\d{4}-\d{2}-\d{2}$/

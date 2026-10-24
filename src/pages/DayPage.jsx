@@ -5,9 +5,10 @@ import { dayPath, TABS } from '../lib/routes.js'
 import Listen from '../components/Listen.jsx'
 import Materials from '../components/Materials.jsx'
 import NewsletterView from '../components/NewsletterView.jsx'
+import PapersView from '../components/PapersView.jsx'
 import YoutubeView from '../components/YoutubeView.jsx'
 
-// יום אחד בתחום אחד: כותרת התאריך + לשוניות (ניוזלטר · פודקאסטים · YouTube · מדריכים)
+// יום אחד בתחום אחד: כותרת התאריך + לשוניות (ניוזלטר · פודקאסטים · YouTube · מדריכים · מאמרים)
 export default function DayPage({ topic, topicName, date, tab, today, latest, navigate }) {
   const [issue, setIssue] = useState(null)
   const [error, setError] = useState('')
@@ -55,6 +56,7 @@ export default function DayPage({ topic, topicName, date, tab, today, latest, na
     podcasts: issue.podcasts.length + issue.links.length,
     youtube: issue.youtube.length,
     guides: (issue.guides || []).length,
+    papers: (issue.papers || []).length,
   }
 
   return (
@@ -83,6 +85,7 @@ export default function DayPage({ topic, topicName, date, tab, today, latest, na
       {tab === 'podcasts' && <PodcastsView issue={issue} date={date} />}
       {tab === 'youtube' && <YoutubeView videos={issue.youtube} empty="אין סרטונים ליום הזה." />}
       {tab === 'guides' && <YoutubeView videos={issue.guides || []} empty="אין מדריכים ליום הזה." />}
+      {tab === 'papers' && <PapersView papers={issue.papers || []} />}
     </div>
   )
 }

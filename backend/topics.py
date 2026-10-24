@@ -1,6 +1,7 @@
 """תחומי על — לכל תחום ימים ותוכן משלו: database/issues/<topic>/<date>/...
 
-הרשימה נשמרת ב-database/topics.json ומנוהלת מדף הניהול (הוספה ומחיקה). הראשון ברשימה = ברירת המחדל.
+הרשימה נשמרת ב-database/topics.json ומנוהלת מדף הניהול (הוספה, עריכה, סדר, מחיקה). הראשון = ברירת המחדל.
+בתיאור אפשר להדגיש: **מודגש** (חשוב) ו-==מסומן== (עדיפות עליונה).
 לכל תחום יש description — מה לכסות בו. גרוק קורא את הרשימה (list_topics) כל בוקר ומפיק תוכן לכל תחום,
 כך שתחום חדש באתר מתחיל לקבל תוכן בלי לשנות לו את ההוראות.
 """
@@ -26,6 +27,7 @@ SEED = [
 ]
 LEGACY_TOPIC = "ai"   # לשם הועברו הימים מלפני התחומים, ולשם מפנות כתובות /files ישנות
 
+MAX_DESCRIPTION = 1500
 _ID_RE = re.compile(r"^[a-z][a-z0-9-]{1,23}$")
 _COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 _DATE_DIR = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -76,12 +78,39 @@ class Topics:
             if any(t["name"] == name for t in self._list):
                 raise StorageError(f'כבר יש תחום בשם "{name}"')
             topic = {"id": tid, "name": name, "color": color or "#475569",
-                     "description": (description or "").strip()[:600]}
+                     "description": (description or "").strip()[:MAX_DESCRIPTION]}
             self._list.append(topic)
             self._save()
             self._stores[tid] = Storage(self.data_dir, tid)
         logger.info("נוסף תחום %s (%s)", tid, name)
         return topic
+
+    def update(self, tid: str, name: str, color: str = "", description: str = "") -> dict:
+        """עריכת שם, צבע ותיאור. המזהה לא משתנה — הכתובות והימים השמורים קשורים אליו."""
+        name = (name or "").strip()
+        if not name or len(name) > 40:
+            raise StorageError("צריך שם לתחום (עד 40 תווים)")
+        if color and not _COLOR_RE.match(color):
+            raise StorageError("צבע בפורמט #RRGGBB")
+        with self._lock:
+            topic = next((t for t in self._list if t["id"] == tid), None)
+            if not topic:
+                raise StorageError(f"תחום לא מוכר: {tid}")
+            if any(t["name"] == name and t["id"] != tid for t in self._list):
+                raise StorageError(f'כבר יש תחום בשם "{name}"')
+            topic.update(name=name, color=color or topic.get("color") or "#475569",
+                         description=(description or "").strip()[:MAX_DESCRIPTION])
+            self._save()
+        return topic
+
+    def reorder(self, ids: list[str]) -> None:
+        """סדר חדש — חייב לכלול כל תחום פעם אחת בדיוק. הראשון הופך לברירת המחדל."""
+        with self._lock:
+            current = {t["id"]: t for t in self._list}
+            if sorted(ids) != sorted(current):
+                raise StorageError("הסדר חייב לכלול כל תחום פעם אחת בדיוק")
+            self._list = [current[i] for i in ids]
+            self._save()
 
     def delete(self, tid: str) -> None:
         """מוחק את התחום וכל הימים שלו. חייב להישאר לפחות תחום אחד."""

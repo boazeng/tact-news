@@ -72,7 +72,8 @@ def build_mcp(topics: Topics) -> MCPServer:
     @server.tool(description=(
         "The topics (תחומי על) on the site — id, name, and description = what to cover in that topic. "
         "The list is managed on the site and can change: call this every morning and publish a full day for each "
-        "topic (topic argument = its id). The first topic is the default."))
+        "topic (topic argument = its id). The first topic is the default. In a description, **text** marks what is "
+        "important and ==text== marks top priority — give those parts more weight."))
     def list_topics(ctx: Context) -> dict[str, Any]:
         return call(ctx, lambda: {"topics": topics.listing()})
 

@@ -94,7 +94,8 @@
 .topic-id { font-size: 12.5px; color: var(--ink-3); }
 .topic-desc { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); }
 .topic-row .link-btn.danger { flex: none; margin-top: 2px; }
-.topic-form { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--rule-2); display: grid; gap: 10px; }
+.topic-form { display: grid; gap: 10px; width: 100%; }
+.topic-new { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--rule-2); display: grid; gap: 10px; }
 .topic-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; }
 .topic-form label { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); font-weight: 600; }
 .topic-form input, .topic-form textarea {
@@ -105,3 +106,35 @@
 .swatches { display: flex; gap: 8px; flex-wrap: wrap; }
 .swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
 .swatch.is-on { border-color: var(--surface); box-shadow: 0 0 0 2px var(--ink); }
+
+.topic-row.is-editing { background: var(--surface); border-color: var(--focus); }
+.order-btns { display: flex; flex-direction: column; flex: none; margin-top: -2px; }
+.order-btns .x-btn { width: 22px; height: 18px; font-size: 10px; line-height: 1; border-radius: 4px; }
+.order-btns .x-btn:disabled { opacity: .25; cursor: default; }
+.topic-row .row-actions { display: flex; gap: 6px; flex: none; margin-top: 2px; }
+.topic-desc strong, .rich-preview strong { color: var(--ink); }
+.topic-desc mark, .rich-preview mark, .rich-btn mark {
+  background: color-mix(in srgb, #facc15 45%, transparent); color: inherit; border-radius: 3px; padding: 0 2px;
+}
+.topics-msg { margin: 8px 0 0; }
+.topic-desc-field { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.topic-desc-field textarea {
+  border: 1px solid var(--rule-2); border-radius: 8px; padding: 8px 10px; resize: vertical;
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; font-weight: 400;
+}
+.rich-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.rich-tools { display: flex; gap: 6px; }
+.rich-btn {
+  border: 1px solid var(--rule-2); background: var(--surface); border-radius: 6px;
+  padding: 2px 10px; font-size: 13px; cursor: pointer; font-weight: 500;
+}
+.rich-btn:hover { border-color: var(--ink-3); }
+.rich-preview {
+  margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--sunk);
+  font-size: 14px; font-weight: 400; color: var(--ink-2);
+}
+.swatch-custom {
+  width: 26px; height: 26px; border-radius: 50%; overflow: hidden; cursor: pointer; position: relative;
+  background: conic-gradient(#ef4444, #f59e0b, #22c55e, #3b82f6, #a855f7, #ef4444);
+}
+.swatch-custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }

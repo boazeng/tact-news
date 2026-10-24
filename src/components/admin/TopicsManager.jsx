@@ -1,101 +1,105 @@
 import { useState } from 'react'
-import { addTopic, deleteTopic } from '../../lib/api.js'
+import { addTopic, deleteTopic, editTopic, orderTopics } from '../../lib/api.js'
+import { renderMarks } from '../../lib/marks.jsx'
+import TopicForm from './TopicForm.jsx'
 
-const SWATCHES = ['#6d28d9', '#0b72b9', '#15803d', '#c62828', '#a8500a', '#0f766e', '#be185d', '#475569']
-
-// תחומי על: הוספה ומחיקה. תחום חדש מופיע מיד באתר ובאפליקציה, וגרוק מפיק לו תוכן לפי התיאור.
+// תחומי על: סדר, עריכה, הוספה ומחיקה. כל שינוי מופיע מיד באתר ובאפליקציה,
+// וגרוק מפיק לכל תחום תוכן לפי התיאור שלו.
 export default function TopicsManager({ topics, onChanged }) {
-  const [form, setForm] = useState({ id: '', name: '', color: SWATCHES[2], description: '' })
-  const [msg, setMsg] = useState('')
+  const [editing, setEditing] = useState(null)
   const [arming, setArming] = useState(null)
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+  const [msg, setMsg] = useState('')
 
-  const add = async (e) => {
-    e.preventDefault()
+  const run = async (fn, done) => {
     setMsg('')
     try {
-      await addTopic(form)
-      setMsg(`התחום "${form.name}" נוסף ✓`)
-      setForm({ id: '', name: '', color: SWATCHES[2], description: '' })
+      await fn()
+      if (done) setMsg(done)
       onChanged()
     } catch (err) {
       setMsg(err.message)
     }
   }
 
-  const remove = async (t) => {
+  const move = (i, delta) => {
+    const ids = topics.map((t) => t.id)
+    const j = i + delta
+    ;[ids[i], ids[j]] = [ids[j], ids[i]]
+    run(() => orderTopics(ids))
+  }
+
+  const remove = (t) => {
     if (arming !== t.id) return setArming(t.id)
     setArming(null)
-    try {
-      await deleteTopic(t.id)
-      setMsg(`התחום "${t.name}" נמחק`)
-      onChanged()
-    } catch (err) {
-      setMsg(err.message)
-    }
+    run(() => deleteTopic(t.id), `התחום "${t.name}" נמחק`)
   }
 
   return (
     <section className="card">
       <h2 className="card-title">תחומי על</h2>
       <p className="kind-hint">
-        הראשון ברשימה הוא ברירת המחדל. גרוק קורא את הרשימה כל בוקר ומפיק לכל תחום יום מלא לפי התיאור שלו.
+        הראשון ברשימה הוא ברירת המחדל — האתר נפתח עליו. גרוק קורא את הרשימה כל בוקר ומפיק לכל תחום יום מלא לפי התיאור.
       </p>
 
       <ul className="topics-list">
-        {topics.map((t) => (
-          <li key={t.id} className="topic-row">
-            <span className="topic-dot" style={{ background: t.color }} aria-hidden="true" />
-            <div className="topic-info">
-              <div className="topic-line">
-                <span className="topic-name">{t.name}</span>
-                <code className="topic-id" dir="ltr">/{t.id}</code>
-                {t.default && <span className="tag">ברירת מחדל</span>}
-              </div>
-              {t.description && <p className="topic-desc">{t.description}</p>}
-            </div>
-            {topics.length > 1 && (
-              <button
-                className={`link-btn danger${arming === t.id ? ' armed' : ''}`}
-                onClick={() => remove(t)} onBlur={() => setArming(null)}
-              >
-                {arming === t.id ? 'למחוק את התחום וכל הימים שלו?' : 'מחיקה'}
-              </button>
+        {topics.map((t, i) => (
+          <li key={t.id} className={`topic-row${editing === t.id ? ' is-editing' : ''}`}>
+            {editing === t.id ? (
+              <TopicForm
+                initial={{ id: t.id, name: t.name, color: t.color, description: t.description || '' }}
+                submitLabel="שמירה"
+                onCancel={() => setEditing(null)}
+                onSubmit={async (f) => {
+                  await editTopic(t.id, { name: f.name, color: f.color, description: f.description })
+                  setEditing(null)
+                  setMsg(`התחום "${f.name}" עודכן ✓`)
+                  onChanged()
+                }}
+              />
+            ) : (
+              <>
+                <span className="order-btns">
+                  <button className="x-btn" disabled={i === 0} onClick={() => move(i, -1)}
+                    aria-label={`העבר את ${t.name} למעלה`} title="למעלה">▲</button>
+                  <button className="x-btn" disabled={i === topics.length - 1} onClick={() => move(i, 1)}
+                    aria-label={`העבר את ${t.name} למטה`} title="למטה">▼</button>
+                </span>
+                <span className="topic-dot" style={{ background: t.color }} aria-hidden="true" />
+                <div className="topic-info">
+                  <div className="topic-line">
+                    <span className="topic-name">{t.name}</span>
+                    <code className="topic-id" dir="ltr">/{t.id}</code>
+                    {t.default && <span className="tag">ברירת מחדל</span>}
+                  </div>
+                  {t.description && <p className="topic-desc">{renderMarks(t.description)}</p>}
+                </div>
+                <span className="row-actions">
+                  <button className="link-btn" onClick={() => { setEditing(t.id); setArming(null) }}>עריכה</button>
+                  {topics.length > 1 && (
+                    <button className={`link-btn danger${arming === t.id ? ' armed' : ''}`}
+                      onClick={() => remove(t)} onBlur={() => setArming(null)}>
+                      {arming === t.id ? 'למחוק את התחום וכל הימים שלו?' : 'מחיקה'}
+                    </button>
+                  )}
+                </span>
+              </>
             )}
           </li>
         ))}
       </ul>
+      {msg && <p className="paste-msg topics-msg">{msg}</p>}
 
-      <form className="topic-form" onSubmit={add}>
+      <div className="topic-new">
         <h3 className="kind-title">תחום חדש</h3>
-        <div className="topic-fields">
-          <label>
-            <span>שם</span>
-            <input value={form.name} onChange={set('name')} placeholder="ספורט" maxLength={40} required />
-          </label>
-          <label>
-            <span>מזהה (באנגלית, מופיע בכתובת)</span>
-            <input value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value.toLowerCase() })}
-              placeholder="sport" dir="ltr" pattern="[a-z][a-z0-9-]{1,23}" required />
-          </label>
-        </div>
-        <label className="topic-desc-field">
-          <span>מה לכסות (ההוראה לגרוק)</span>
-          <textarea value={form.description} onChange={set('description')} rows={2} maxLength={600}
-            placeholder="כדורגל וכדורסל בארץ ובעולם, ליגת האלופות, NBA, אולימפיאדה" />
-        </label>
-        <div className="swatches" role="radiogroup" aria-label="צבע">
-          {SWATCHES.map((c) => (
-            <button type="button" key={c} role="radio" aria-checked={form.color === c} aria-label={c}
-              className={`swatch${form.color === c ? ' is-on' : ''}`} style={{ background: c }}
-              onClick={() => setForm({ ...form, color: c })} />
-          ))}
-        </div>
-        <div className="paste-row">
-          <button className="btn primary" type="submit">הוספת תחום</button>
-          {msg && <span className="paste-msg">{msg}</span>}
-        </div>
-      </form>
+        <TopicForm
+          isNew submitLabel="הוספת תחום"
+          onSubmit={async (f) => {
+            await addTopic(f)
+            setMsg(`התחום "${f.name}" נוסף ✓`)
+            onChanged()
+          }}
+        />
+      </div>
     </section>
   )
 }

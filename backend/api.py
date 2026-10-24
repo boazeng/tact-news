@@ -50,6 +50,25 @@ def build_router(topics: Topics) -> APIRouter:
         guard(topics.add, body.id, body.name, body.color, body.description)
         return {"ok": True, "topics": topics.listing()}
 
+    class TopicEdit(BaseModel):
+        name: str
+        color: str = ""
+        description: str = ""
+
+    @router.patch("/api/topics/{tid}")
+    def edit_topic(tid: str, body: TopicEdit, _admin=admin):
+        guard(topics.update, tid, body.name, body.color, body.description)
+        return {"ok": True, "topics": topics.listing()}
+
+    class TopicOrder(BaseModel):
+        ids: list[str]
+
+    @router.put("/api/topics-order")
+    def order_topics(body: TopicOrder, _admin=admin):
+        """סדר חדש לתחומים; הראשון הופך לברירת המחדל."""
+        guard(topics.reorder, body.ids)
+        return {"ok": True, "topics": topics.listing()}
+
     @router.delete("/api/topics/{tid}")
     def delete_topic(tid: str, _admin=admin):
         """מוחק את התחום וכל הימים שלו — בלתי הפיך."""

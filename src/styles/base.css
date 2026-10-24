@@ -178,3 +178,4 @@ main { min-height: 70vh; padding-bottom: 120px; }
   .topbar-inner { gap: 12px; padding: 8px 12px; }
   .day { min-width: 46px; padding: 4px 6px; }
 }
+.day.is-empty:not(.is-current) .day-dm { color: var(--ink-3); font-weight: 500; }

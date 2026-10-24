@@ -33,9 +33,9 @@ export default function TopBar({ issues, active, navigate }) {
               key={it.date}
               href={`/d/${it.date}`}
               onClick={(e) => go(e, `/d/${it.date}`)}
-              className={`day${it.date === active ? ' is-current' : ''}`}
+              className={`day${it.date === active ? ' is-current' : ''}${it.empty ? ' is-empty' : ''}`}
               aria-current={it.date === active ? 'page' : undefined}
-              title={it.title || it.date}
+              title={it.empty ? 'עוד לא פורסם' : it.title || it.date}
             >
               <span className="day-wd">{shortWeekday(it.date)}</span>
               <span className="day-dm">{dayMonth(it.date)}</span>

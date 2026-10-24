@@ -10,7 +10,7 @@ const match = (item, q) =>
   [item.title, item.summary, item.details, item.source_name]
     .some((t) => String(t || '').toLowerCase().includes(q))
 
-export default function DayPage({ date }) {
+export default function DayPage({ date, today, latest, navigate }) {
   const [issue, setIssue] = useState(null)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
@@ -22,10 +22,19 @@ export default function DayPage({ date }) {
     setQuery('')
     getIssue(date)
       .then((d) => alive && setIssue(d))
-      .catch((e) => alive && setError(e.status === 404 ? 'אין גיליון לתאריך הזה.' : e.message))
+      .catch((e) => alive && setError(e.status === 404 ? 'missing' : e.message))
     window.scrollTo(0, 0)
     return () => { alive = false }
   }, [date])
+
+  // הגיליון של היום עוד לא עלה → בודקים שוב כל 3 דקות, והוא מופיע בלי רענון
+  useEffect(() => {
+    if (error !== 'missing' || date !== today) return
+    const t = setInterval(() => {
+      getIssue(date).then((d) => { setIssue(d); setError('') }).catch(() => {})
+    }, 3 * 60 * 1000)
+    return () => clearInterval(t)
+  }, [error, date, today])
 
   const data = issue?.newsletter?.kind === 'json' ? issue.newsletter.data : null
   const sections = useMemo(() => {
@@ -38,6 +47,9 @@ export default function DayPage({ date }) {
     }))
   }, [data, query])
 
+  if (error === 'missing') {
+    return <Missing date={date} isToday={date === today} latest={latest} navigate={navigate} />
+  }
   if (error) return <div className="page"><p className="empty">{error}</p></div>
   if (!issue) return <div className="page"><div className="loading" aria-label="טוען" /></div>
 
@@ -105,6 +117,29 @@ export default function DayPage({ date }) {
       {!issue.newsletter && <p className="empty">הניוזלטר של היום עוד לא עלה.</p>}
 
       {issue.materials.length > 0 && <Materials materials={issue.materials} />}
+    </div>
+  )
+}
+
+// אין גיליון לתאריך — בדרך כלל היום, לפני שגרוק פרסם
+function Missing({ date, isToday, latest, navigate }) {
+  const other = latest && latest !== date
+  return (
+    <div className="page">
+      <header className="masthead">
+        <span className="kicker">{weekday(date)} · גיליון יומי</span>
+        <h1 className="mast-date">{longDate(date)}</h1>
+      </header>
+      <div className="pending">
+        <p className="pending-title">{isToday ? 'הגיליון של היום עוד לא פורסם' : 'אין גיליון לתאריך הזה'}</p>
+        {isToday && <p className="pending-sub">הוא יופיע כאן אוטומטית ברגע שיעלה.</p>}
+        {other && (
+          <button className="btn primary" onClick={() => navigate(`/d/${latest}`)}>
+            לגיליון האחרון · {weekday(latest)} {dayMonth(latest)}
+          </button>
+        )}
+        {!latest && <p className="pending-sub">עוד אין גיליונות באתר.</p>}
+      </div>
     </div>
   )
 }

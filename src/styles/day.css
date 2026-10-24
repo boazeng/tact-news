@@ -166,3 +166,11 @@
   .story-lead { padding: 16px 16px 12px; }
   html { scroll-padding-top: 70px; }
 }
+
+/* ───────── issue not published yet ───────── */
+.pending {
+  text-align: center; padding: 48px 16px 64px;
+  border: 1.5px dashed var(--rule-2); border-radius: var(--radius);
+}
+.pending-title { font-family: var(--serif); font-weight: 700; font-size: 24px; margin: 0 0 6px; }
+.pending-sub { color: var(--ink-3); margin: 0 0 20px; }

@@ -21,8 +21,7 @@ INSTRUCTIONS = (
     "This is the TACT News site (tact-news.newavera.co.il) — Boaz's daily Hebrew news digest. "
     "Content is organised by topic (default 'ai' = בינה מלאכותית; list_topics shows all) and each day has 3 tabs: "
     "newsletter, podcasts (voice brief + episodes + podcast links), youtube (video links), "
-    "guides (YouTube how-to / tutorial videos — a separate tab), papers (recent academic papers), "
-    "tech (new technology developments: products, inventions, breakthroughs). "
+    "guides (YouTube how-to / tutorial videos — a separate tab), papers (recent academic papers). "
     "Publish the newsletter with publish_newsletter (one call, full JSON — it may already include 'podcasts' and "
     "'youtube'), upload audio with upload_audio_*, and check with get_status. All text in Hebrew. "
     "Days are deleted automatically after 14 days."
@@ -49,12 +48,9 @@ newsletter_json — JSON object (as a string):
                 "url": "https://arxiv.org/abs/... (the paper's page)", "pdf_url": "optional",
                 "summary": "2–4 sentences in Hebrew: what they found",
                 "details": "optional, Hebrew: method, results, limitations, why it matters" } ],
-  "tech": [ { "title": "Hebrew headline", "company": "company / lab (optional)",
-              "summary": "2–4 sentences in Hebrew: what was developed", "details": "optional Hebrew expansion",
-              "url": "https://... (source)", "source_name": "The Verge" } ],
   "closing": "optional closing line"
 }
-"podcasts" → Podcasts tab, "youtube" → YouTube tab, "guides" → Guides (מדריכים) tab, "papers" → Papers (מאמרים) tab, "tech" → Technology (טכנולוגיה) tab. All optional.
+"podcasts" → Podcasts tab, "youtube" → YouTube tab, "guides" → Guides (מדריכים) tab, "papers" → Papers (מאמרים) tab. All optional.
 Publishing again for the same date+topic replaces that day's newsletter."""
 
 TOPIC_ARG = "topic = topic id (default 'ai'; see list_topics)."
@@ -113,14 +109,6 @@ def build_mcp(topics: Topics) -> MCPServer:
         return call(ctx, lambda: add_list(topics.get(topic), "papers", papers_json, date))
 
     @server.tool(description=(
-        "Set the TECHNOLOGY developments for a day (טכנולוגיה tab — new products, inventions, breakthroughs; "
-        'replaces the existing list). tech_json = JSON array of {"title","company","summary","details","url",'
-        '"source_name"} in Hebrew. Real developments with a working source link. date defaults to today. ' + TOPIC_ARG))
-    def add_tech(ctx: Context, tech_json: str, date: str = "",
-                 topic: str = DEFAULT_TOPIC) -> dict[str, Any]:
-        return call(ctx, lambda: add_list(topics.get(topic), "tech", tech_json, date))
-
-    @server.tool(description=(
         "Upload an audio file (voice brief / NotebookLM episode) to the Podcasts tab by giving a DIRECT public link "
         "to the file (.mp3/.m4a/.wav). The server downloads it. A notebooklm.google.com page link will NOT work. "
         "title = episode title in Hebrew (start with '0 ' for the voice brief so it is first). " + TOPIC_ARG))
@@ -146,7 +134,7 @@ def build_mcp(topics: Topics) -> MCPServer:
 
     @server.tool(description=(
         "What the site has for a date (default today) in a topic: newsletter items, audio files, podcast links, "
-        "YouTube videos, guides, papers, technology developments, and the days on the site. " + TOPIC_ARG))
+        "YouTube videos, guides, papers, and the days on the site. " + TOPIC_ARG))
     def get_status(ctx: Context, date: str = "", topic: str = DEFAULT_TOPIC) -> dict[str, Any]:
         def run():
             storage = topics.get(topic)

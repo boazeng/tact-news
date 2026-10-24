@@ -2,14 +2,12 @@ import { useState } from 'react'
 import { sourceLabel } from '../lib/sections.js'
 
 // ידיעה: כותרת + תקציר; "הרחבה" פותחת את הפירוט במקום (בלי לקפוץ לסוף הדף כמו ב-PDF)
-// kicker = שורה קטנה מעל הכותרת (בלשונית "טכנולוגיה": החברה)
-export default function StoryCard({ item, id, lead, kicker }) {
+export default function StoryCard({ item, id, lead }) {
   const [open, setOpen] = useState(false)
   const paragraphs = String(item.details || '').split(/\n+/).filter(Boolean)
 
   return (
     <article id={id} className={`story${lead ? ' story-lead' : ''}${open ? ' is-open' : ''}`}>
-      {kicker && <span className="story-kicker">{kicker}</span>}
       <h3 className="story-title">{item.title}</h3>
       {item.summary && <p className="story-summary">{item.summary}</p>}
       {open && (

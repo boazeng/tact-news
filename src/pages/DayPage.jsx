@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getIssue } from '../lib/api.js'
 import { dayMonth, longDate, weekday } from '../lib/dates.js'
 import { dayPath, TABS } from '../lib/routes.js'
@@ -6,14 +6,12 @@ import Listen from '../components/Listen.jsx'
 import Materials from '../components/Materials.jsx'
 import NewsletterView from '../components/NewsletterView.jsx'
 import PapersView from '../components/PapersView.jsx'
-import TechView from '../components/TechView.jsx'
 import YoutubeView from '../components/YoutubeView.jsx'
 
-// יום אחד בתחום אחד: כותרת התאריך + לשוניות (ניוזלטר · פודקאסטים · YouTube · מדריכים · מאמרים · טכנולוגיה)
+// יום אחד בתחום אחד: כותרת התאריך + לשוניות (ניוזלטר · פודקאסטים · YouTube · מדריכים · מאמרים)
 export default function DayPage({ topic, topicName, date, tab, today, latest, navigate }) {
   const [issue, setIssue] = useState(null)
   const [error, setError] = useState('')
-  const tabsRef = useRef(null)
 
   useEffect(() => {
     let alive = true
@@ -33,11 +31,6 @@ export default function DayPage({ topic, topicName, date, tab, today, latest, na
     }, 3 * 60 * 1000)
     return () => clearInterval(t)
   }, [error, topic, date, today])
-
-  // בטלפון שורת הלשוניות נגללת לצדדים — הלשונית הפעילה תמיד בתוך המסך
-  useEffect(() => {
-    tabsRef.current?.querySelector('.is-on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [tab, issue])
 
   const head = (
     <header className="masthead">
@@ -64,13 +57,12 @@ export default function DayPage({ topic, topicName, date, tab, today, latest, na
     youtube: issue.youtube.length,
     guides: (issue.guides || []).length,
     papers: (issue.papers || []).length,
-    tech: (issue.tech || []).length,
   }
 
   return (
     <div className="page">
       {head}
-      <nav className="tabs" aria-label="לשוניות" ref={tabsRef}>
+      <nav className="tabs" aria-label="לשוניות">
         {TABS.map((t) => (
           <a
             key={t.id}
@@ -94,7 +86,6 @@ export default function DayPage({ topic, topicName, date, tab, today, latest, na
       {tab === 'youtube' && <YoutubeView videos={issue.youtube} empty="אין סרטונים ליום הזה." />}
       {tab === 'guides' && <YoutubeView videos={issue.guides || []} empty="אין מדריכים ליום הזה." />}
       {tab === 'papers' && <PapersView papers={issue.papers || []} />}
-      {tab === 'tech' && <TechView items={issue.tech || []} />}
     </div>
   )
 }

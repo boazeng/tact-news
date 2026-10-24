@@ -6,7 +6,6 @@
         youtube.json                                          ← לשונית "YouTube"
         guides.json                                           ← לשונית "מדריכים" (גם YouTube)
         papers.json                                           ← לשונית "מאמרים" (מאמרים אקדמיים)
-        tech.json                                             ← לשונית "טכנולוגיה" (פיתוחים חדשים)
 """
 import json
 import os
@@ -108,7 +107,6 @@ class Storage:
             "youtube": self.load_list(day, "youtube"),
             "guides": self.load_list(day, "guides"),
             "papers": self.load_list(day, "papers"),
-            "tech": self.load_list(day, "tech"),
         }
 
     # ───────── writing ─────────
@@ -124,7 +122,7 @@ class Storage:
             # רשימות שגרוק שולח בתוך הניוזלטר → ללשוניות שלהן
             if isinstance(data.get("podcasts"), list):
                 self.save_list(day, "links", data.pop("podcasts"))
-            for which in ("youtube", "guides", "papers", "tech"):
+            for which in ("youtube", "guides", "papers"):
                 if isinstance(data.get(which), list):
                     self.save_list(day, which, data.pop(which))
             src.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -187,8 +185,7 @@ class Storage:
 
     def save_list(self, day: str, which: str, items: list) -> int:
         """מחליף את הרשימה של היום. מחזיר כמה נשמרו."""
-        parse = {"links": parse_link, "youtube": parse_video, "guides": parse_video, "papers": parse_paper,
-                 "tech": parse_tech}[which]
+        parse = {"links": parse_link, "youtube": parse_video, "guides": parse_video, "papers": parse_paper}[which]
         clean = [parse(x) for x in items]
         (self.day_dir(day, create=True) / f"{which}.json").write_text(
             json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -235,7 +232,7 @@ def file_url(topic: str, day: str, kind: str, name: str) -> str:
 
 
 def has_content(info: dict) -> bool:
-    return any(info[k] for k in ("newsletter", "podcasts", "materials", "links", "youtube", "guides", "papers", "tech"))
+    return any(info[k] for k in ("newsletter", "podcasts", "materials", "links", "youtube", "guides", "papers"))
 
 
 def safe_name(name: str) -> str:
@@ -361,23 +358,6 @@ def parse_paper(x) -> dict:
     }
 
 
-def parse_tech(x) -> dict:
-    """פיתוח טכנולוגי: {title, url, summary?, details?, source_name?, company?} — מוצג כמו ידיעה בניוזלטר."""
-    if not isinstance(x, dict) or not str(x.get("title", "")).strip():
-        raise StorageError('לכל פיתוח צריך "title"')
-    url = str(x.get("url") or x.get("source_url") or "").strip()
-    if not re.match(r"^https?://", url):
-        raise StorageError(f'קישור לא תקין בפיתוח "{x["title"]}"')
-    return {
-        "title": _text(x, "title", 300),
-        "source_url": url,
-        "source_name": _text(x, "source_name", 120),
-        "company": _text(x, "company", 120),
-        "summary": _text(x, "summary", 1200),
-        "details": _text(x, "details", 4000),
-    }
-
-
 def _display_title(stem: str) -> str:
     """"0 תקציר קולי" → "תקציר קולי": המספר בתחילת השם קובע רק את הסדר בנגן."""
     title = " ".join(stem.replace("_", " ").split())
@@ -409,5 +389,4 @@ def _summary(info: dict) -> dict:
         "youtube": len(info["youtube"]),
         "guides": len(info["guides"]),
         "papers": len(info["papers"]),
-        "tech": len(info["tech"]),
     }

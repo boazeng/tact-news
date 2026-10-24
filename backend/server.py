@@ -32,7 +32,7 @@ from shared_auth import install_auth  # noqa: E402
 
 from .api import build_router  # noqa: E402
 from .mcp_server import install_mcp  # noqa: E402
-from .storage import Storage  # noqa: E402
+from .topics import Topics  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("tact-news")
@@ -40,16 +40,17 @@ logger = logging.getLogger("tact-news")
 DIST_DIR = PROJECT_ROOT / "dist"
 DATA_DIR = Path(os.getenv("TACT_NEWS_DATA_DIR", str(PROJECT_ROOT / "database")))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-storage = Storage(DATA_DIR)
+topics = Topics(DATA_DIR)   # בעלייה הראשונה מעביר ימים מלפני התחומים לתחום ברירת המחדל
 
 
 async def _retention_loop():
     """מחיקת ימים ישנים — בעלייה ואז פעם בשעה."""
     while True:
         try:
-            removed = await asyncio.to_thread(storage.purge_expired)
-            if removed:
-                logger.info("נמחקו גיליונות ישנים: %s", ", ".join(sorted(removed)))
+            for storage in topics.all():
+                removed = await asyncio.to_thread(storage.purge_expired)
+                if removed:
+                    logger.info("נמחקו גיליונות ישנים (%s): %s", storage.topic, ", ".join(sorted(removed)))
         except Exception:  # noqa: BLE001
             logger.exception("מחיקת גיליונות ישנים נכשלה")
         await asyncio.sleep(3600)
@@ -73,8 +74,8 @@ install_auth(
     initial_users=[{"email": "boazen@gmail.com", "role": "admin"}],
     public_prefixes=("/",),
 )
-app.include_router(build_router(storage))
-mcp_lifespan = install_mcp(app, storage)   # /mcp — גרוק מפרסם דרכו (Bearer TACT_NEWS_PUBLISH_TOKEN)
+app.include_router(build_router(topics))
+mcp_lifespan = install_mcp(app, topics)   # /mcp — גרוק מפרסם דרכו (Bearer TACT_NEWS_PUBLISH_TOKEN)
 
 
 # ───────────────── serve the built SPA ─────────────────

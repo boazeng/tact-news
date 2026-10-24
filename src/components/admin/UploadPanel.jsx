@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { deleteFile, getIssue, paste } from '../../lib/api.js'
 import { longDate } from '../../lib/dates.js'
+import { dayPath } from '../../lib/routes.js'
 import { uploadFile } from '../../lib/upload.js'
 
 // שלושה סוגי תוכן לכל יום: ניוזלטר, פרקי פודקאסט, חומר ל-NotebookLM
@@ -10,13 +11,13 @@ const KINDS = {
   materials: { label: 'חומר ל-NotebookLM', hint: 'הטקסט שגרוק הכין, או קבצים', accept: '.md,.txt,.pdf,.html,.docx,.json', multiple: true, paste: true },
 }
 
-export default function UploadPanel({ day, setDay, onChanged, navigate }) {
+export default function UploadPanel({ topic, day, setDay, onChanged, navigate }) {
   const [info, setInfo] = useState(null)
   const [jobs, setJobs] = useState([])   // [{id, name, kind, progress, error, done}]
 
   const load = useCallback(() => {
-    getIssue(day).then(setInfo).catch(() => setInfo({ newsletter: null, podcasts: [], materials: [] }))
-  }, [day])
+    getIssue(topic, day).then(setInfo).catch(() => setInfo({ newsletter: null, podcasts: [], materials: [] }))
+  }, [topic, day])
   useEffect(load, [load])
 
   const changed = () => { load(); onChanged() }
@@ -27,7 +28,7 @@ export default function UploadPanel({ day, setDay, onChanged, navigate }) {
       const id = `${Date.now()}-${Math.random()}`
       setJobs((js) => [{ id, name: file.name, kind, progress: 0 }, ...js])
       try {
-        await uploadFile(day, kind, file, (progress) => patch(id, { progress }))
+        await uploadFile(topic, day, kind, file, (progress) => patch(id, { progress }))
         patch(id, { done: true, progress: 1 })
       } catch (e) {
         patch(id, { error: e.message })
@@ -37,7 +38,7 @@ export default function UploadPanel({ day, setDay, onChanged, navigate }) {
   }
 
   const remove = async (kind, name) => {
-    await deleteFile(day, kind, name).catch((e) => alert(e.message))
+    await deleteFile(topic, day, kind, name).catch(() => {})
     changed()
   }
 
@@ -56,13 +57,13 @@ export default function UploadPanel({ day, setDay, onChanged, navigate }) {
           <span>{longDate(day)}</span>
         </label>
         {(info?.newsletter || info?.podcasts?.length > 0) && (
-          <button className="link-btn" onClick={() => navigate(`/d/${day}`)}>לצפייה בדף ←</button>
+          <button className="link-btn" onClick={() => navigate(dayPath(topic, day))}>לצפייה בדף ←</button>
         )}
       </div>
 
       <div className="kinds">
         {Object.entries(KINDS).map(([kind, cfg]) => (
-          <KindBox key={kind} kind={kind} cfg={cfg} day={day} files={files[kind] || []}
+          <KindBox key={kind} kind={kind} cfg={cfg} topic={topic} day={day} files={files[kind] || []}
             onFiles={(fs) => upload(kind, fs)} onRemove={(name) => remove(kind, name)}
             onPasted={changed} />
         ))}
@@ -85,7 +86,7 @@ export default function UploadPanel({ day, setDay, onChanged, navigate }) {
   )
 }
 
-function KindBox({ kind, cfg, day, files, onFiles, onRemove, onPasted }) {
+function KindBox({ kind, cfg, topic, day, files, onFiles, onRemove, onPasted }) {
   const input = useRef(null)
   const [over, setOver] = useState(false)
   const [text, setText] = useState('')
@@ -102,7 +103,7 @@ function KindBox({ kind, cfg, day, files, onFiles, onRemove, onPasted }) {
   const submitText = async () => {
     setMsg('שומר…')
     try {
-      await paste(day, kind, text, title)
+      await paste(topic, day, kind, text, title)
       setText('')
       setTitle('')
       setMsg('נשמר ✓')

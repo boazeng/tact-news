@@ -10,6 +10,8 @@ from fastapi import HTTPException
 
 from .storage import Storage, StorageError, strip_code_fences, today
 
+SITE = "https://tact-news.newavera.co.il"
+
 
 def token_ok(header: str | None) -> bool:
     expected = os.getenv("TACT_NEWS_PUBLISH_TOKEN", "")
@@ -29,8 +31,13 @@ def resolve_date(storage: Storage, date: str, data: dict | None) -> str:
     return day
 
 
-def publish(storage: Storage, content, date: str = "", podcasts: list | None = None) -> dict:
-    """content = ה-JSON של הניוזלטר (מחרוזת או אובייקט). podcasts = רשימת קישורים (לא חובה)."""
+def page_url(storage: Storage, day: str, tab: str = "") -> str:
+    return f"{SITE}/{storage.topic}/{day}" + (f"/{tab}" if tab else "")
+
+
+def publish(storage: Storage, content, date: str = "", podcasts: list | None = None,
+            youtube: list | None = None) -> dict:
+    """content = ה-JSON של הניוזלטר (מחרוזת או אובייקט). podcasts/youtube = רשימות קישורים (לא חובה)."""
     if isinstance(content, dict):
         text, data = json.dumps(content, ensure_ascii=False), content
     else:
@@ -42,27 +49,42 @@ def publish(storage: Storage, content, date: str = "", podcasts: list | None = N
     day = resolve_date(storage, date, data)
     kind = storage.publish_text(day, text)
     if podcasts:
-        storage.save_links(day, podcasts)
-    info = storage.day_info(day)
-    items = sum(len(s.get("items", [])) for s in ((info["newsletter"] or {}).get("data") or {}).get("sections", []))
-    return {
-        "ok": True,
-        "date": day,
-        "kind": kind,
-        "items": items,
-        "podcast_links": len(info["links"]),
-        "materials": len(info["materials"]),
-        "url": f"https://tact-news.newavera.co.il/d/{day}",
-    }
+        storage.save_list(day, "links", podcasts)
+    if youtube:
+        storage.save_list(day, "youtube", youtube)
+    return status(storage, day) | {"ok": True, "kind": kind}
 
 
-def add_podcasts(storage: Storage, podcasts, date: str = "") -> dict:
-    if isinstance(podcasts, str):
+def _as_list(value, what: str) -> list:
+    if isinstance(value, str):
         try:
-            podcasts = json.loads(strip_code_fences(podcasts))
+            value = json.loads(strip_code_fences(value))
         except ValueError as e:
-            raise StorageError(f"רשימת הפרקים אינה JSON תקין: {e}") from e
-    if not isinstance(podcasts, list) or not podcasts:
-        raise StorageError("צריך רשימה של פרקים")
+            raise StorageError(f"רשימת ה{what} אינה JSON תקין: {e}") from e
+    if not isinstance(value, list) or not value:
+        raise StorageError(f"צריך רשימה של {what}")
+    return value
+
+
+def add_list(storage: Storage, which: str, items, date: str = "") -> dict:
+    """which = links (פרקי פודקאסט) | youtube. מחליף את הרשימה של היום."""
+    what = "פרקים" if which == "links" else "סרטונים"
     day = resolve_date(storage, date, None)
-    return {"ok": True, "date": day, "podcast_links": storage.save_links(day, podcasts)}
+    count = storage.save_list(day, which, _as_list(items, what))
+    tab = "podcasts" if which == "links" else "youtube"
+    return {"ok": True, "topic": storage.topic, "date": day, "saved": count, "url": page_url(storage, day, tab)}
+
+
+def status(storage: Storage, day: str) -> dict:
+    info = storage.day_info(day)
+    data = (info["newsletter"] or {}).get("data") or {}
+    return {
+        "topic": storage.topic,
+        "date": day,
+        "published": bool(info["newsletter"]),
+        "items": sum(len(s.get("items", [])) for s in data.get("sections", [])),
+        "audio_files": [p["title"] for p in info["podcasts"]],
+        "podcast_links": [link["title"] for link in info["links"]],
+        "youtube": [v["title"] for v in info["youtube"]],
+        "url": page_url(storage, day),
+    }

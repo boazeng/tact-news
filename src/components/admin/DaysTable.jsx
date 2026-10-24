@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import { deleteDay } from '../../lib/api.js'
 import { dayMonth, shortWeekday } from '../../lib/dates.js'
+import { dayPath } from '../../lib/routes.js'
 
 // כל הימים שבאתר. מחיקה בשתי לחיצות (בלי חלון אישור של הדפדפן).
-export default function DaysTable({ issues, onChanged, navigate, onPick }) {
+export default function DaysTable({ topic, issues, onChanged, navigate, onPick }) {
   const [arming, setArming] = useState(null)
 
   const del = async (day) => {
     if (arming !== day) return setArming(day)
     setArming(null)
-    await deleteDay(day).catch(() => {})
+    await deleteDay(topic, day).catch(() => {})
     onChanged()
   }
 
@@ -22,13 +23,13 @@ export default function DaysTable({ issues, onChanged, navigate, onPick }) {
       ) : (
         <table className="days-table">
           <thead>
-            <tr><th>יום</th><th>ידיעות</th><th>פרקים</th><th>חומר</th><th>נמחק ב-</th><th /></tr>
+            <tr><th>יום</th><th>ידיעות</th><th>פודקאסטים</th><th>YouTube</th><th>נמחק ב-</th><th /></tr>
           </thead>
           <tbody>
             {issues.map((it) => (
               <tr key={it.date}>
                 <td>
-                  <a href={`/d/${it.date}`} onClick={(e) => { e.preventDefault(); navigate(`/d/${it.date}`) }}>
+                  <a href={dayPath(topic, it.date)} onClick={(e) => { e.preventDefault(); navigate(dayPath(topic, it.date)) }}>
                     {shortWeekday(it.date)} {dayMonth(it.date)}
                   </a>
                   {!it.newsletter && <span className="tag-warn">אין ניוזלטר</span>}
@@ -36,7 +37,7 @@ export default function DaysTable({ issues, onChanged, navigate, onPick }) {
                 </td>
                 <td>{it.items || '–'}</td>
                 <td>{it.podcasts || '–'}</td>
-                <td>{it.materials || '–'}</td>
+                <td>{it.youtube || '–'}</td>
                 <td>{dayMonth(it.expires)}</td>
                 <td className="row-actions">
                   <button className="link-btn" onClick={() => onPick(it.date)}>עריכה</button>

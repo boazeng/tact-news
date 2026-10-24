@@ -1,30 +1,33 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getIssues } from './lib/api.js'
+import { getIssues, getTopics } from './lib/api.js'
 import { todayIL } from './lib/dates.js'
+import { parse } from './lib/routes.js'
 import { PlayerProvider } from './components/Player.jsx'
 import TopBar from './components/TopBar.jsx'
 import DayPage from './pages/DayPage.jsx'
 import AdminPage from './pages/AdminPage.jsx'
 
-// ניתוב פשוט: /  → היום הנוכחי (גם אם הגיליון עוד לא עלה) · /d/YYYY-MM-DD → יום · /admin → ניהול
-function parse(path) {
-  const m = path.match(/^\/d\/(\d{4}-\d{2}-\d{2})\/?$/)
-  if (m) return { page: 'day', date: m[1] }
-  if (path.startsWith('/admin')) return { page: 'admin' }
-  return { page: 'home' }
-}
+const FALLBACK_TOPICS = [{ id: 'ai', name: 'בינה מלאכותית', default: true }]
 
 export default function App() {
   const [route, setRoute] = useState(() => parse(location.pathname))
+  const [topics, setTopics] = useState(FALLBACK_TOPICS)
   const [issues, setIssues] = useState(null)
   const [today, setToday] = useState(todayIL)
 
+  useEffect(() => { getTopics().then((d) => d.topics?.length && setTopics(d.topics)).catch(() => {}) }, [])
+
+  const defaultTopic = (topics.find((t) => t.default) || topics[0]).id
+  const topic = route.topic || defaultTopic
+  const topicInfo = topics.find((t) => t.id === topic)
+
   const loadIssues = useCallback(() => {
-    getIssues()
+    if (!topicInfo) return
+    getIssues(topic)
       .then((d) => { setIssues(d.issues); if (d.today) setToday(d.today) })
       .catch(() => setIssues([]))
-  }, [])
-  useEffect(loadIssues, [loadIssues])
+  }, [topic, topicInfo])
+  useEffect(() => { setIssues(null); loadIssues() }, [loadIssues])
 
   useEffect(() => {
     const onPop = () => setRoute(parse(location.pathname))
@@ -32,28 +35,38 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop)
   }, [])
 
-  const navigate = useCallback((to) => {
+  const navigate = useCallback((to, { keepScroll = false } = {}) => {
     if (to !== location.pathname) history.pushState(null, '', to)
     setRoute(parse(to))
-    window.scrollTo(0, 0)
+    if (!keepScroll) window.scrollTo(0, 0)
   }, [])
 
+  const date = route.date || today
+  const tab = route.tab || 'newsletter'
   const latest = issues?.[0]?.date
-  const date = route.page === 'day' ? route.date : route.page === 'home' ? today : null
   // היום הנוכחי תמיד ברצועה — גם לפני שהגיליון שלו עלה
   const strip = issues && !issues.some((it) => it.date === today)
     ? [{ date: today, empty: true }, ...issues] : issues || []
 
   return (
     <PlayerProvider>
-      <TopBar issues={strip} active={date} navigate={navigate} />
+      <TopBar
+        topics={topics} topic={topic} issues={route.page === 'admin' ? [] : strip}
+        active={date} tab={tab} navigate={navigate}
+      />
       <main>
-        {route.page === 'admin' && <AdminPage navigate={navigate} onChanged={loadIssues} />}
-        {route.page !== 'admin' && issues === null && (
+        {route.page === 'admin' && <AdminPage topics={topics} navigate={navigate} onChanged={loadIssues} />}
+        {route.page === 'day' && !topicInfo && (
+          <div className="page"><p className="empty">אין תחום כזה באתר.</p></div>
+        )}
+        {route.page === 'day' && topicInfo && issues === null && (
           <div className="page"><div className="loading" aria-label="טוען" /></div>
         )}
-        {date && issues !== null && (
-          <DayPage key={date} date={date} today={today} latest={latest} navigate={navigate} />
+        {route.page === 'day' && topicInfo && issues !== null && (
+          <DayPage
+            key={`${topic}/${date}`} topic={topic} topicName={topicInfo.name}
+            date={date} tab={tab} today={today} latest={latest} navigate={navigate}
+          />
         )}
       </main>
       <footer className="site-foot">

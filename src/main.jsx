@@ -5,6 +5,7 @@ import './styles/base.css'
 import './styles/day.css'
 import './styles/listen.css'
 import './styles/admin.css'
+import './styles/tabs.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

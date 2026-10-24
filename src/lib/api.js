@@ -16,12 +16,14 @@ const json = (method, data) => ({
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify(data),
 })
+const q = (topic) => `topic=${encodeURIComponent(topic)}`
 
-export const getIssues = () => request('/api/issues')
-export const getIssue = (day) => request(`/api/issues/${day}`)
+export const getTopics = () => request('/api/topics')
+export const getIssues = (topic) => request(`/api/issues?${q(topic)}`)
+export const getIssue = (topic, day) => request(`/api/issues/${day}?${q(topic)}`)
 export const getMe = () => request('/auth/me').catch(() => ({}))
-export const paste = (day, kind, text, title = '') =>
-  request(`/api/issues/${day}/paste`, json('POST', { kind, text, title }))
-export const deleteDay = (day) => request(`/api/issues/${day}`, { method: 'DELETE' })
-export const deleteFile = (day, kind, name) =>
-  request(`/api/issues/${day}/${kind}/${encodeURIComponent(name)}`, { method: 'DELETE' })
+export const paste = (topic, day, kind, text, title = '') =>
+  request(`/api/issues/${day}/paste?${q(topic)}`, json('POST', { kind, text, title }))
+export const deleteDay = (topic, day) => request(`/api/issues/${day}?${q(topic)}`, { method: 'DELETE' })
+export const deleteFile = (topic, day, kind, name) =>
+  request(`/api/issues/${day}/${kind}/${encodeURIComponent(name)}?${q(topic)}`, { method: 'DELETE' })

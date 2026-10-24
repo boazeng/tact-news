@@ -5,15 +5,16 @@ import UploadPanel from '../components/admin/UploadPanel.jsx'
 import DaysTable from '../components/admin/DaysTable.jsx'
 import GrokPrompt from '../components/admin/GrokPrompt.jsx'
 
-export default function AdminPage({ navigate, onChanged }) {
+export default function AdminPage({ topics, navigate, onChanged }) {
   const [me, setMe] = useState(null)
   const [issues, setIssues] = useState([])
   const [day, setDay] = useState(todayIL())
+  const [topic, setTopic] = useState(topics[0].id)
 
   const refresh = useCallback(() => {
-    getIssues().then((d) => setIssues(d.issues)).catch(() => {})
+    getIssues(topic).then((d) => setIssues(d.issues)).catch(() => {})
     onChanged()
-  }, [onChanged])
+  }, [topic, onChanged])
 
   useEffect(() => { getMe().then(setMe) }, [])
   useEffect(() => { if (me?.role === 'admin') refresh() }, [me, refresh])
@@ -40,12 +41,20 @@ export default function AdminPage({ navigate, onChanged }) {
     <div className="page admin">
       <div className="admin-head">
         <h1 className="admin-h1">ניהול הגיליונות</h1>
+        {topics.length > 1 && (
+          <label className="date-pick">
+            תחום
+            <select value={topic} onChange={(e) => setTopic(e.target.value)}>
+              {topics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </label>
+        )}
         <span className="admin-who">
           {me.email} · <a href="/logout">יציאה</a>
         </span>
       </div>
-      <UploadPanel day={day} setDay={setDay} onChanged={refresh} navigate={navigate} />
-      <DaysTable issues={issues} onChanged={refresh} navigate={navigate} onPick={setDay} />
+      <UploadPanel topic={topic} day={day} setDay={setDay} onChanged={refresh} navigate={navigate} />
+      <DaysTable topic={topic} issues={issues} onChanged={refresh} navigate={navigate} onPick={setDay} />
       <GrokPrompt />
     </div>
   )

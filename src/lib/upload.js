@@ -17,7 +17,7 @@ function sendChunk(url, form, onProgress) {
   })
 }
 
-export async function uploadFile(day, kind, file, onProgress = () => {}) {
+export async function uploadFile(topic, day, kind, file, onProgress = () => {}) {
   const total = Math.max(1, Math.ceil(file.size / CHUNK))
   let result = null
   for (let index = 0; index < total; index++) {
@@ -28,7 +28,7 @@ export async function uploadFile(day, kind, file, onProgress = () => {}) {
     form.append('index', String(index))
     form.append('total', String(total))
     form.append('chunk', file.slice(start, start + CHUNK), file.name)
-    result = await sendChunk(`/api/issues/${day}/upload`, form,
+    result = await sendChunk(`/api/issues/${day}/upload?topic=${encodeURIComponent(topic)}`, form,
       (loaded) => onProgress(Math.min(1, (start + loaded) / file.size)))
   }
   onProgress(1)

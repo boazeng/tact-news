@@ -15,14 +15,20 @@
 - **חי:** https://tact-news.newavera.co.il — Mac mini, `~/server/tact-news`, פורט 8110, מנהרה ייעודית. פרטים: `deploy/DEPLOY.md`
 - **ריפו:** github.com/boazeng/tact-news (**ציבורי** — לא להכניס סודות)
 
+## תחומי על ולשוניות
+- **תחום על** (`backend/topics.py` → `TOPICS`): לכל תחום ימים משלו. כרגע רק `ai`. תחום חדש = שורה אחת שם.
+  כתובות: `/<topic>/<date>[/podcasts|/youtube]`; `/` = תחום ברירת המחדל + היום; `/d/<date>` ישן → `ai`.
+- **לשוניות ביום:** ניוזלטר (ברירת מחדל) · פודקאסטים (אודיו + `links.json` + materials) · YouTube (`youtube.json`, מתנגן ב-youtube-nocookie).
+- כל נתיב API מקבל `?topic=`; כל כלי MCP מקבל `topic`. נתונים מלפני התחומים הועברו אוטומטית ל-`issues/ai/` בעלייה.
+
 ## מבנה
-- `backend/` — FastAPI. `storage.py` (תיקייה לכל יום, retention, קישורי פודקאסט), `api.py` (נתיבים + `POST /api/publish`), `publish.py` (טוקן + לוגיקת פרסום משותפת), `mcp_server.py` (`/mcp`: publish_newsletter · add_podcast_links · upload_audio_from_url · upload_audio_base64 · get_status), `audio_intake.py` (אודיו מגרוק: URL / base64 בחתיכות / `POST /api/publish/audio`; חוסם כתובות פנימיות), `media.py` (WAV→M4A), `server.py` (auth + SPA)
+- `backend/` — FastAPI. `storage.py` (תיקייה לכל יום, retention, קישורי פודקאסט), `api.py` (נתיבים + `POST /api/publish`), `publish.py` (טוקן + לוגיקת פרסום משותפת), `mcp_server.py` (`/mcp`: list_topics · publish_newsletter · add_podcast_links · add_youtube_links · upload_audio_from_url · upload_audio_base64 · get_status), `topics.py` (תחומי על + הגירה), `audio_intake.py` (אודיו מגרוק: URL / base64 בחתיכות / `POST /api/publish/audio`; חוסם כתובות פנימיות), `media.py` (WAV→M4A), `server.py` (auth + SPA)
 - `src/` — React/Vite RTL. `pages/DayPage` (הגיליון), `pages/AdminPage` (העלאה), `components/Player` (נגן גלובלי — זוכר מיקום ומהירות, Media Session)
 - `docs/GROK-PROMPT.md` — ההוראה לגרוק לפרסם לבד. **מקור יחיד** — דף הניהול מייבא אותו (`?raw`)
 - `samples/2026-10-23.json` — גיליון אמיתי בפורמט, לבדיקות
 
 ## נתונים
-`database/issues/YYYY-MM-DD/` → `newsletter.{json|html|pdf}` + `links.json` (פרקים מגרוק) + `podcasts/` (אודיו שהועלה) + `materials/`. אין DB מלבד `auth.db` (משתמשים).
+`database/issues/<topic>/YYYY-MM-DD/` → `newsletter.{json|html|pdf}` + `links.json` (פרקים מגרוק) + `youtube.json` + `podcasts/` (אודיו שהועלה) + `materials/`. אין DB מלבד `auth.db` (משתמשים).
 JSON של ניוזלטר: `{title, sections:[{name, color?, items:[{title, summary, details, source_url, source_name}]}], podcasts?, closing?, notebooklm?}` —
 `podcasts` (`[{title, url, show, duration_minutes, description}]`) נשלף ל-`links.json`;
 `notebooklm` (מחרוזת או `[{title,text}]`) נשלף לקובץ ב-`materials/` בזמן השמירה.

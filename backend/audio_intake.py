@@ -36,7 +36,8 @@ def _filename(title: str, ext: str) -> str:
 
 def _store(storage: Storage, day: str, part: Path, title: str, ext: str) -> dict:
     name = _filename(title, ext)
-    head = part.read_bytes()[:16]
+    with open(part, "rb") as f:
+        head = f.read(16)
     if head.lstrip().startswith((b"<", b"{")):
         part.unlink(missing_ok=True)
         raise StorageError("זה לא קובץ אודיו (התקבל דף HTML או JSON) — צריך קישור ישיר ל-mp3/m4a/wav")
@@ -45,8 +46,8 @@ def _store(storage: Storage, day: str, part: Path, title: str, ext: str) -> dict
         saved = storage.save_file(day, "podcasts", part, name)
     finally:
         part.unlink(missing_ok=True)
-    return {"ok": True, "date": day, "name": saved,
-            "url": f"https://tact-news.newavera.co.il/d/{day}"}
+    return {"ok": True, "topic": storage.topic, "date": day, "name": saved,
+            "url": f"https://tact-news.newavera.co.il/{storage.topic}/{day}/podcasts"}
 
 
 def _public_host(host: str) -> None:

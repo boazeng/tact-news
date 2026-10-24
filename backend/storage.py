@@ -1,14 +1,15 @@
-"""אחסון הגיליונות — תיקייה לכל יום, ומחיקה אוטומטית אחרי RETENTION_DAYS.
+"""אחסון הגיליונות — תיקייה לכל יום בכל תחום, ומחיקה אוטומטית אחרי RETENTION_DAYS.
 
-    database/issues/2026-10-23/
-        newsletter.json | newsletter.html | newsletter.pdf   ← הניוזלטר (אחד בלבד)
-        podcasts/<קבצי אודיו>                               ← פרקים מ-NotebookLM
-        materials/<קבצים>                                    ← חומר הרקע ל-NotebookLM
+    database/issues/<topic>/2026-10-23/
+        newsletter.json | newsletter.html | newsletter.pdf   ← לשונית "ניוזלטר" (אחד בלבד)
+        podcasts/<קבצי אודיו> + links.json + materials/      ← לשונית "פודקאסטים"
+        youtube.json                                          ← לשונית "YouTube"
 """
 import json
 import os
 import re
 import shutil
+from urllib.parse import parse_qs, quote, urlparse
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -39,8 +40,9 @@ class StorageError(ValueError):
 
 
 class Storage:
-    def __init__(self, data_dir: Path) -> None:
-        self.root = data_dir / "issues"
+    def __init__(self, data_dir: Path, topic: str) -> None:
+        self.topic = topic
+        self.root = data_dir / "issues" / topic
         self.root.mkdir(parents=True, exist_ok=True)
 
     # ───────── paths & validation ─────────
@@ -74,7 +76,7 @@ class Storage:
         for d in sorted(self.root.iterdir(), reverse=True):
             if d.is_dir() and _DATE_RE.match(d.name):
                 info = self.day_info(d.name)
-                if info["newsletter"] or info["podcasts"] or info["materials"] or info["links"]:
+                if has_content(info):
                     days.append(_summary(info))
         return days
 
@@ -85,7 +87,7 @@ class Storage:
             p = base / f"newsletter{ext}"
             if p.is_file():
                 newsletter = {"kind": ext[1:], "name": p.name,
-                              "url": file_url(day, "newsletter", p.name)}
+                              "url": file_url(self.topic, day, "newsletter", p.name)}
                 if ext == ".json":
                     try:
                         newsletter["data"] = json.loads(p.read_text(encoding="utf-8"))
@@ -93,12 +95,14 @@ class Storage:
                         newsletter["data"] = None
                 break
         return {
+            "topic": self.topic,
             "date": day,
             "expires": expires_on(day),
             "newsletter": newsletter,
-            "podcasts": _list_files(base / "podcasts", day, "podcasts"),
-            "materials": _list_files(base / "materials", day, "materials"),
-            "links": self.load_links(day),
+            "podcasts": _list_files(base / "podcasts", self.topic, day, "podcasts"),
+            "materials": _list_files(base / "materials", self.topic, day, "materials"),
+            "links": self.load_list(day, "links"),
+            "youtube": self.load_list(day, "youtube"),
         }
 
     # ───────── writing ─────────
@@ -111,8 +115,11 @@ class Storage:
         if ext == ".json":
             data = parse_newsletter_json(src.read_text(encoding="utf-8-sig"))
             self._extract_embedded_material(day, data)
+            # רשימות שגרוק שולח בתוך הניוזלטר → ללשוניות שלהן
             if isinstance(data.get("podcasts"), list):
-                self.save_links(day, data.pop("podcasts"))
+                self.save_list(day, "links", data.pop("podcasts"))
+            if isinstance(data.get("youtube"), list):
+                self.save_list(day, "youtube", data.pop("youtube"))
             src.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         for old in NEWSLETTER_EXTS:
             (base / f"newsletter{old}").unlink(missing_ok=True)
@@ -163,18 +170,19 @@ class Storage:
             tmp.unlink(missing_ok=True)
         return ext[1:]
 
-    # ───────── podcast links ─────────
-    def load_links(self, day: str) -> list[dict]:
-        p = self.day_dir(day) / "links.json"
+    # ───────── link lists: links (פרקי פודקאסט) · youtube (סרטונים) ─────────
+    def load_list(self, day: str, which: str) -> list[dict]:
+        p = self.day_dir(day) / f"{which}.json"
         try:
             return json.loads(p.read_text(encoding="utf-8")) if p.is_file() else []
         except (OSError, ValueError):
             return []
 
-    def save_links(self, day: str, links: list) -> int:
-        """מחליף את רשימת קישורי הפודקאסט של היום. מחזיר כמה נשמרו."""
-        clean = [parse_link(x) for x in links]
-        (self.day_dir(day, create=True) / "links.json").write_text(
+    def save_list(self, day: str, which: str, items: list) -> int:
+        """מחליף את הרשימה של היום. מחזיר כמה נשמרו."""
+        parse = {"links": parse_link, "youtube": parse_video}[which]
+        clean = [parse(x) for x in items]
+        (self.day_dir(day, create=True) / f"{which}.json").write_text(
             json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
         return len(clean)
 
@@ -214,9 +222,12 @@ def expires_on(day: str) -> str:
     return (date.fromisoformat(day) + timedelta(days=RETENTION_DAYS)).isoformat()
 
 
-def file_url(day: str, kind: str, name: str) -> str:
-    from urllib.parse import quote
-    return f"/files/{day}/{kind}/{quote(name)}"
+def file_url(topic: str, day: str, kind: str, name: str) -> str:
+    return f"/files/{topic}/{day}/{kind}/{quote(name)}"
+
+
+def has_content(info: dict) -> bool:
+    return any(info[k] for k in ("newsletter", "podcasts", "materials", "links", "youtube"))
 
 
 def safe_name(name: str) -> str:
@@ -271,18 +282,57 @@ def parse_link(x) -> dict:
     }
 
 
+_YT_HOSTS = ("youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be")
+_YT_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def youtube_id(url: str) -> str | None:
+    """watch?v= · youtu.be/ · /shorts/ · /live/ · /embed/ → מזהה הסרטון (11 תווים)."""
+    p = urlparse(url)
+    if p.hostname == "youtu.be":
+        vid = p.path.strip("/").split("/")[0]
+    elif p.path == "/watch":
+        vid = (parse_qs(p.query).get("v") or [""])[0]
+    else:
+        parts = p.path.strip("/").split("/")
+        vid = parts[1] if len(parts) > 1 and parts[0] in ("shorts", "live", "embed") else ""
+    return vid if _YT_ID.match(vid or "") else None
+
+
+def parse_video(x) -> dict:
+    """סרטון YouTube: {title, url, channel?, description?, duration_minutes?}."""
+    if not isinstance(x, dict) or not str(x.get("title", "")).strip():
+        raise StorageError('לכל סרטון צריך "title"')
+    url = str(x.get("url", "")).strip()
+    host = (urlparse(url).hostname or "").lower()
+    if not re.match(r"^https?://", url) or host not in _YT_HOSTS:
+        raise StorageError(f'"{x["title"]}": צריך קישור של YouTube (youtube.com / youtu.be)')
+    try:
+        minutes = float(x.get("duration_minutes") or 0) or None
+    except (TypeError, ValueError):
+        minutes = None
+    return {
+        "title": str(x["title"]).strip()[:200],
+        "url": url,
+        "video_id": youtube_id(url),
+        "channel": str(x.get("channel") or x.get("show") or "").strip()[:120],
+        "description": str(x.get("description") or "").strip()[:600],
+        "duration_minutes": minutes,
+    }
+
+
 def _display_title(stem: str) -> str:
     """"0 תקציר קולי" → "תקציר קולי": המספר בתחילת השם קובע רק את הסדר בנגן."""
     title = " ".join(stem.replace("_", " ").split())
     return re.sub(r"^\d{1,2}\s*[-.)]?\s+", "", title) or title
 
 
-def _list_files(folder: Path, day: str, kind: str) -> list[dict]:
+def _list_files(folder: Path, topic: str, day: str, kind: str) -> list[dict]:
     if not folder.is_dir():
         return []
     return [
         {"name": p.name, "title": _display_title(p.stem), "size": p.stat().st_size,
-         "ext": p.suffix.lower()[1:], "url": file_url(day, kind, p.name)}
+         "ext": p.suffix.lower()[1:], "url": file_url(topic, day, kind, p.name)}
         for p in sorted(folder.iterdir()) if p.is_file()
     ]
 
@@ -299,4 +349,5 @@ def _summary(info: dict) -> dict:
         "items": items,
         "podcasts": len(info["podcasts"]) + len(info["links"]),
         "materials": len(info["materials"]),
+        "youtube": len(info["youtube"]),
     }

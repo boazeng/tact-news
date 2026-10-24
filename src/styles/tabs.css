@@ -1,0 +1,95 @@
+/* ───────── tabs: ניוזלטר · פודקאסטים · YouTube ───────── */
+.tabs {
+  display: flex; gap: 4px; margin: 0 0 22px; padding: 4px;
+  background: var(--sunk); border-radius: 14px; width: fit-content; max-width: 100%;
+  overflow-x: auto; scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  flex: none; display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 18px; border-radius: 10px;
+  font-weight: 700; font-size: 15px; text-decoration: none; color: var(--ink-2);
+  transition: background .15s, color .15s;
+}
+.tab:hover { color: var(--ink); }
+.tab.is-on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgb(0 0 0 / 0.08); }
+.tab-n {
+  font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--ink) 9%, transparent); color: var(--ink-2);
+  border-radius: 999px; padding: 0 7px; line-height: 19px;
+}
+.tab.is-on .tab-n { background: var(--ink); color: var(--paper); }
+
+/* ───────── topic (תחום על) ───────── */
+.topic { position: relative; flex: none; }
+.topic-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--rule-2); background: var(--surface);
+  border-radius: 999px; padding: 5px 13px; font-size: 14px; font-weight: 700;
+  cursor: default;
+}
+.topic-btn.is-menu { cursor: pointer; }
+.topic-btn.is-menu:hover { border-color: var(--ink-3); }
+.topic-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--t-ai); }
+.topic-chev { color: var(--ink-3); line-height: 0; position: relative; top: -3px; }
+.topic-menu {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40;
+  list-style: none; margin: 0; padding: 6px; min-width: 180px;
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 12px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.12);
+}
+.topic-menu button {
+  width: 100%; text-align: right; background: none; border: 0; cursor: pointer;
+  padding: 8px 12px; border-radius: 8px; font-weight: 600;
+}
+.topic-menu button:hover { background: var(--sunk); }
+.topic-menu button.is-on { color: var(--t-ai); }
+
+/* ───────── YouTube ───────── */
+.videos {
+  display: grid; gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+}
+.video {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 12px;
+  overflow: hidden; box-shadow: var(--shadow); display: flex; flex-direction: column;
+}
+.video-frame { position: relative; aspect-ratio: 16 / 9; background: #000; }
+.video-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.video-thumb {
+  position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0;
+  cursor: pointer; background: #111;
+}
+.video-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity .15s; }
+.video-thumb:hover img { opacity: .85; }
+.video-play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 58px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+  background: rgb(220 38 38 / 0.92); color: #fff;
+}
+.video-dur {
+  position: absolute; bottom: 8px; left: 8px;
+  background: rgb(0 0 0 / 0.78); color: #fff; font-size: 12px; font-weight: 700;
+  border-radius: 5px; padding: 1px 6px;
+}
+.video-body { padding: 12px 14px 14px; }
+.video-title { margin: 0; font-family: var(--serif); font-weight: 700; font-size: 17px; line-height: 1.35; }
+.video-title a { text-decoration: none; }
+.video-title a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.video-meta { display: flex; align-items: center; gap: 10px; margin-top: 4px; font-size: 13px; color: var(--ink-3); }
+.video-channel { font-weight: 700; color: var(--ink-2); }
+.video-desc { margin: 6px 0 0; font-size: 14.5px; color: var(--ink-2); }
+
+@media (max-width: 640px) {
+  .tabs { width: 100%; }
+  .tab { flex: 1; justify-content: center; padding: 8px 10px; }
+  .topic-btn { padding: 4px 10px; font-size: 13px; }
+}
+
+/* טלפון: שם האתר + התחום בשורה אחת, רצועת הימים ברוחב מלא מתחת */
+@media (max-width: 640px) {
+  .topbar-inner { flex-wrap: wrap; row-gap: 6px; }
+  .topic { margin-inline-start: auto; }
+  .days { order: 3; width: 100%; margin-inline-start: 0; }
+  html { scroll-padding-top: 110px; }
+}

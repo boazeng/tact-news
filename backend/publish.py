@@ -36,7 +36,8 @@ def page_url(storage: Storage, day: str, tab: str = "") -> str:
 
 
 def publish(storage: Storage, content, date: str = "", podcasts: list | None = None,
-            youtube: list | None = None, guides: list | None = None, papers: list | None = None) -> dict:
+            youtube: list | None = None, guides: list | None = None, papers: list | None = None,
+            tech: list | None = None) -> dict:
     """content = ה-JSON של הניוזלטר (מחרוזת או אובייקט). podcasts/youtube/guides = רשימות קישורים (לא חובה)."""
     if isinstance(content, dict):
         text, data = json.dumps(content, ensure_ascii=False), content
@@ -56,6 +57,8 @@ def publish(storage: Storage, content, date: str = "", podcasts: list | None = N
         storage.save_list(day, "guides", guides)
     if papers:
         storage.save_list(day, "papers", papers)
+    if tech:
+        storage.save_list(day, "tech", tech)
     return status(storage, day) | {"ok": True, "kind": kind}
 
 
@@ -71,8 +74,9 @@ def _as_list(value, what: str) -> list:
 
 
 def add_list(storage: Storage, which: str, items, date: str = "") -> dict:
-    """which = links (פרקי פודקאסט) | youtube | guides | papers. מחליף את הרשימה של היום."""
-    what = {"links": "פרקים", "youtube": "סרטונים", "guides": "מדריכים", "papers": "מאמרים"}[which]
+    """which = links (פרקי פודקאסט) | youtube | guides | papers | tech. מחליף את הרשימה של היום."""
+    what = {"links": "פרקים", "youtube": "סרטונים", "guides": "מדריכים", "papers": "מאמרים",
+            "tech": "פיתוחים"}[which]
     day = resolve_date(storage, date, None)
     count = storage.save_list(day, which, _as_list(items, what))
     tab = "podcasts" if which == "links" else which
@@ -92,5 +96,6 @@ def status(storage: Storage, day: str) -> dict:
         "youtube": [v["title"] for v in info["youtube"]],
         "guides": [v["title"] for v in info["guides"]],
         "papers": [p["title"] for p in info["papers"]],
+        "tech": [t["title"] for t in info["tech"]],
         "url": page_url(storage, day),
     }

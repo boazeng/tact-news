@@ -19,6 +19,8 @@ const json = (method, data) => ({
 const q = (topic) => `topic=${encodeURIComponent(topic)}`
 
 export const getTopics = () => request('/api/topics')
+export const addTopic = (topic) => request('/api/topics', json('POST', topic))
+export const deleteTopic = (id) => request(`/api/topics/${encodeURIComponent(id)}`, { method: 'DELETE' })
 export const getIssues = (topic) => request(`/api/issues?${q(topic)}`)
 export const getIssue = (topic, day) => request(`/api/issues/${day}?${q(topic)}`)
 export const getMe = () => request('/auth/me').catch(() => ({}))

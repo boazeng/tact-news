@@ -4,12 +4,15 @@ import { todayIL } from '../lib/dates.js'
 import UploadPanel from '../components/admin/UploadPanel.jsx'
 import DaysTable from '../components/admin/DaysTable.jsx'
 import GrokPrompt from '../components/admin/GrokPrompt.jsx'
+import TopicsManager from '../components/admin/TopicsManager.jsx'
 
-export default function AdminPage({ topics, navigate, onChanged }) {
+export default function AdminPage({ topics, navigate, onChanged, onTopicsChanged }) {
   const [me, setMe] = useState(null)
   const [issues, setIssues] = useState([])
   const [day, setDay] = useState(todayIL())
-  const [topic, setTopic] = useState(topics[0].id)
+  const [picked, setTopic] = useState(topics[0].id)
+  // תחום שנמחק → חוזרים לברירת המחדל
+  const topic = topics.some((t) => t.id === picked) ? picked : topics[0].id
 
   const refresh = useCallback(() => {
     getIssues(topic).then((d) => setIssues(d.issues)).catch(() => {})
@@ -55,6 +58,7 @@ export default function AdminPage({ topics, navigate, onChanged }) {
       </div>
       <UploadPanel topic={topic} day={day} setDay={setDay} onChanged={refresh} navigate={navigate} />
       <DaysTable topic={topic} issues={issues} onChanged={refresh} navigate={navigate} onPick={setDay} />
+      <TopicsManager topics={topics} onChanged={onTopicsChanged} />
       <GrokPrompt />
     </div>
   )

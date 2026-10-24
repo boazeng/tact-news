@@ -12,10 +12,17 @@ const FALLBACK_TOPICS = [{ id: 'ai', name: 'בינה מלאכותית', default:
 export default function App() {
   const [route, setRoute] = useState(() => parse(location.pathname))
   const [topics, setTopics] = useState(FALLBACK_TOPICS)
+  const [topicsLoaded, setTopicsLoaded] = useState(false)
   const [issues, setIssues] = useState(null)
   const [today, setToday] = useState(todayIL)
 
-  useEffect(() => { getTopics().then((d) => d.topics?.length && setTopics(d.topics)).catch(() => {}) }, [])
+  const loadTopics = useCallback(() => {
+    getTopics()
+      .then((d) => d.topics?.length && setTopics(d.topics))
+      .catch(() => {})
+      .finally(() => setTopicsLoaded(true))
+  }, [])
+  useEffect(loadTopics, [loadTopics])
 
   const defaultTopic = (topics.find((t) => t.default) || topics[0]).id
   const topic = route.topic || defaultTopic
@@ -55,8 +62,11 @@ export default function App() {
         active={date} tab={tab} navigate={navigate}
       />
       <main>
-        {route.page === 'admin' && <AdminPage topics={topics} navigate={navigate} onChanged={loadIssues} />}
-        {route.page === 'day' && !topicInfo && (
+        {route.page === 'admin' && <AdminPage topics={topics} navigate={navigate} onChanged={loadIssues} onTopicsChanged={loadTopics} />}
+        {route.page === 'day' && !topicInfo && !topicsLoaded && (
+          <div className="page"><div className="loading" aria-label="טוען" /></div>
+        )}
+        {route.page === 'day' && !topicInfo && topicsLoaded && (
           <div className="page"><p className="empty">אין תחום כזה באתר.</p></div>
         )}
         {route.page === 'day' && topicInfo && issues === null && (

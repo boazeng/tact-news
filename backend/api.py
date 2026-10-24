@@ -1,5 +1,5 @@
 """נתיבי ה-API: קריאה ציבורית, העלאה ומחיקה למנהל בלבד.
-כל נתיב מקבל ?topic= (ברירת מחדל: התחום הראשון ב-topics.py)."""
+כל נתיב מקבל ?topic= (ריק = ברירת המחדל: התחום הראשון ברשימה)."""
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -11,7 +11,7 @@ from . import audio_intake
 from .media import maybe_transcode
 from .publish import publish, require_token, resolve_date
 from .storage import MEDIA_TYPES, RETENTION_DAYS, StorageError, has_content, safe_name, today
-from .topics import DEFAULT_TOPIC, Topics
+from .topics import LEGACY_TOPIC, Topics
 
 MAX_UPLOAD_BYTES = 1024 * 1024 * 1024   # 1GB לקובץ — WAV ארוך עדיין נכנס
 
@@ -38,13 +38,32 @@ def build_router(topics: Topics) -> APIRouter:
     def list_topics():
         return {"topics": topics.listing()}
 
+    class NewTopic(BaseModel):
+        id: str
+        name: str
+        color: str = ""
+        description: str = ""
+
+    @router.post("/api/topics")
+    def add_topic(body: NewTopic, _admin=admin):
+        """תחום על חדש — מופיע מיד באתר, באפליקציה ובכלי של גרוק."""
+        guard(topics.add, body.id, body.name, body.color, body.description)
+        return {"ok": True, "topics": topics.listing()}
+
+    @router.delete("/api/topics/{tid}")
+    def delete_topic(tid: str, _admin=admin):
+        """מוחק את התחום וכל הימים שלו — בלתי הפיך."""
+        guard(topics.delete, tid)
+        return {"ok": True, "topics": topics.listing()}
+
     @router.get("/api/issues")
-    def list_issues(topic: str = DEFAULT_TOPIC):
-        return {"topic": topic, "issues": store(topic).list_days(), "today": today().isoformat(),
+    def list_issues(topic: str = ""):
+        storage = store(topic)
+        return {"topic": storage.topic, "issues": storage.list_days(), "today": today().isoformat(),
                 "retention_days": RETENTION_DAYS}
 
     @router.get("/api/issues/{day}")
-    def get_issue(day: str, topic: str = DEFAULT_TOPIC):
+    def get_issue(day: str, topic: str = ""):
         info = guard(store(topic).day_info, day)
         if not has_content(info):
             raise HTTPException(404, "אין גיליון לתאריך הזה")
@@ -70,11 +89,11 @@ def build_router(topics: Topics) -> APIRouter:
     @router.get("/files/{day}/{kind}/{name}", include_in_schema=False)
     def get_file_legacy(day: str, kind: str, name: str):
         """קישורים מלפני התחומים."""
-        return serve_file(DEFAULT_TOPIC, day, kind, name)
+        return serve_file(LEGACY_TOPIC, day, kind, name)
 
     # ───────── מנהל ─────────
     @router.post("/api/issues/{day}/upload")
-    def upload_chunk(day: str, topic: str = DEFAULT_TOPIC, kind: str = Form(...), name: str = Form(...),
+    def upload_chunk(day: str, topic: str = "", kind: str = Form(...), name: str = Form(...),
                      index: int = Form(...), total: int = Form(...),
                      chunk: UploadFile = File(...), _admin=admin):
         """העלאה בחתיכות (Cloudflare חוסם בקשות מעל 100MB).
@@ -112,7 +131,7 @@ def build_router(topics: Topics) -> APIRouter:
         title: str = ""
 
     @router.post("/api/issues/{day}/paste")
-    def paste(day: str, body: Paste, topic: str = DEFAULT_TOPIC, _admin=admin):
+    def paste(day: str, body: Paste, topic: str = "", _admin=admin):
         """הדבקת טקסט ישר מהצ'אט של גרוק — בלי לשמור קובץ קודם."""
         text = body.text.strip()
         if not text:
@@ -124,12 +143,12 @@ def build_router(topics: Topics) -> APIRouter:
         return {"ok": True, "kind": guard(store(topic).publish_text, day, text)}
 
     @router.delete("/api/issues/{day}")
-    def delete_day(day: str, topic: str = DEFAULT_TOPIC, _admin=admin):
+    def delete_day(day: str, topic: str = "", _admin=admin):
         guard(store(topic).delete_day, day)
         return {"ok": True}
 
     @router.delete("/api/issues/{day}/{kind}/{name}")
-    def delete_file(day: str, kind: str, name: str, topic: str = DEFAULT_TOPIC, _admin=admin):
+    def delete_file(day: str, kind: str, name: str, topic: str = "", _admin=admin):
         guard(store(topic).delete_file, day, kind, name)
         return {"ok": True}
 
@@ -137,7 +156,7 @@ def build_router(topics: Topics) -> APIRouter:
     class Publish(BaseModel):
         content: str | dict
         date: str = ""
-        topic: str = DEFAULT_TOPIC
+        topic: str = ""
         podcasts: list | None = None
         youtube: list | None = None
         guides: list | None = None
@@ -151,7 +170,7 @@ def build_router(topics: Topics) -> APIRouter:
 
     @router.post("/api/publish/audio")
     def publish_audio(request: Request, file: UploadFile = File(...), title: str = Form(""),
-                      date: str = Form(""), topic: str = Form(DEFAULT_TOPIC)):
+                      date: str = Form(""), topic: str = Form("")):
         """העלאת קובץ אודיו ללשונית הפודקאסטים (multipart: file, title, date, topic)."""
         require_token(request.headers.get("authorization"))
         storage = store(topic)

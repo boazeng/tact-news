@@ -80,3 +80,28 @@
   .job-bar { display: none; }
   .days-table th:nth-child(4), .days-table td:nth-child(4) { display: none; }
 }
+
+/* ───────── תחומי על ───────── */
+.topics-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.topic-row {
+  display: flex; align-items: flex-start; gap: 12px;
+  border: 1px solid var(--rule); border-radius: 10px; padding: 10px 14px; background: var(--paper);
+}
+.topic-row .topic-dot { margin-top: 8px; flex: none; }
+.topic-info { flex: 1; min-width: 0; }
+.topic-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.topic-name { font-weight: 700; }
+.topic-id { font-size: 12.5px; color: var(--ink-3); }
+.topic-desc { margin: 2px 0 0; font-size: 13.5px; color: var(--ink-2); }
+.topic-row .link-btn.danger { flex: none; margin-top: 2px; }
+.topic-form { margin-top: 18px; padding-top: 16px; border-top: 1px dashed var(--rule-2); display: grid; gap: 10px; }
+.topic-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; }
+.topic-form label { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); font-weight: 600; }
+.topic-form input, .topic-form textarea {
+  border: 1px solid var(--rule-2); border-radius: 8px; padding: 8px 10px;
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; font-weight: 400;
+}
+.topic-form input[dir="ltr"] { text-align: left; }
+.swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; }
+.swatch.is-on { border-color: var(--surface); box-shadow: 0 0 0 2px var(--ink); }

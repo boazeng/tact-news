@@ -15,11 +15,12 @@ from starlette.types import Receive, Scope, Send
 from . import audio_intake
 from .publish import add_list, publish, resolve_date, status, token_ok
 from .storage import StorageError
-from .topics import DEFAULT_TOPIC, Topics
+from .topics import Topics
 
 INSTRUCTIONS = (
     "This is the TACT News site (tact-news.newavera.co.il) — Boaz's daily Hebrew news digest. "
-    "Content is organised by topic (default 'ai' = בינה מלאכותית; list_topics shows all) and each day has 3 tabs: "
+    "Content is organised by topic. The topic list changes — call list_topics every time: each topic has a "
+    "description of what to cover, and you publish a full day for EVERY topic. Each day has tabs: "
     "newsletter, podcasts (voice brief + episodes + podcast links), youtube (video links), "
     "guides (YouTube how-to / tutorial videos — a separate tab), papers (recent academic papers). "
     "Publish the newsletter with publish_newsletter (one call, full JSON — it may already include 'podcasts' and "
@@ -53,7 +54,7 @@ newsletter_json — JSON object (as a string):
 "podcasts" → Podcasts tab, "youtube" → YouTube tab, "guides" → Guides (מדריכים) tab, "papers" → Papers (מאמרים) tab. All optional.
 Publishing again for the same date+topic replaces that day's newsletter."""
 
-TOPIC_ARG = "topic = topic id (default 'ai'; see list_topics)."
+TOPIC_ARG = "topic = topic id from list_topics (empty = the default topic)."
 
 
 def build_mcp(topics: Topics) -> MCPServer:
@@ -68,20 +69,23 @@ def build_mcp(topics: Topics) -> MCPServer:
         except StorageError as e:
             raise ToolError(f"[400] {e}") from None
 
-    @server.tool(description="The topics (תחומי על) on the site. Publish to a topic with the topic argument.")
+    @server.tool(description=(
+        "The topics (תחומי על) on the site — id, name, and description = what to cover in that topic. "
+        "The list is managed on the site and can change: call this every morning and publish a full day for each "
+        "topic (topic argument = its id). The first topic is the default."))
     def list_topics(ctx: Context) -> dict[str, Any]:
         return call(ctx, lambda: {"topics": topics.listing()})
 
     @server.tool(description="Publish a day's newsletter (creates or replaces it). " + TOPIC_ARG + "\n" + NEWSLETTER_FORMAT)
     def publish_newsletter(ctx: Context, newsletter_json: str, date: str = "",
-                           topic: str = DEFAULT_TOPIC) -> dict[str, Any]:
+                           topic: str = "") -> dict[str, Any]:
         return call(ctx, lambda: publish(topics.get(topic), newsletter_json, date))
 
     @server.tool(description=(
         "Set the podcast LINKS for a day (Podcasts tab; replaces the existing list). podcasts_json = JSON array of "
         '{"title","show","url","duration_minutes","description"}. date defaults to today (Israel). ' + TOPIC_ARG))
     def add_podcast_links(ctx: Context, podcasts_json: str, date: str = "",
-                          topic: str = DEFAULT_TOPIC) -> dict[str, Any]:
+                          topic: str = "") -> dict[str, Any]:
         return call(ctx, lambda: add_list(topics.get(topic), "links", podcasts_json, date))
 
     @server.tool(description=(
@@ -89,7 +93,7 @@ def build_mcp(topics: Topics) -> MCPServer:
         '{"title","channel","url","duration_minutes","description"}. url must be youtube.com or youtu.be — '
         "the video plays inside the site. date defaults to today (Israel). " + TOPIC_ARG))
     def add_youtube_links(ctx: Context, videos_json: str, date: str = "",
-                          topic: str = DEFAULT_TOPIC) -> dict[str, Any]:
+                          topic: str = "") -> dict[str, Any]:
         return call(ctx, lambda: add_list(topics.get(topic), "youtube", videos_json, date))
 
     @server.tool(description=(
@@ -97,7 +101,7 @@ def build_mcp(topics: Topics) -> MCPServer:
         'guides_json = JSON array of {"title","channel","url","duration_minutes","description"}. '
         "url must be youtube.com or youtu.be. date defaults to today (Israel). " + TOPIC_ARG))
     def add_guide_links(ctx: Context, guides_json: str, date: str = "",
-                        topic: str = DEFAULT_TOPIC) -> dict[str, Any]:
+                        topic: str = "") -> dict[str, Any]:
         return call(ctx, lambda: add_list(topics.get(topic), "guides", guides_json, date))
 
     @server.tool(description=(
@@ -105,7 +109,7 @@ def build_mcp(topics: Topics) -> MCPServer:
         '{"title","authors","venue","published","url","pdf_url","summary","details"} — title in the original '
         "language, summary/details in Hebrew. Real papers only, with a working link. date defaults to today. " + TOPIC_ARG))
     def add_papers(ctx: Context, papers_json: str, date: str = "",
-                   topic: str = DEFAULT_TOPIC) -> dict[str, Any]:
+                   topic: str = "") -> dict[str, Any]:
         return call(ctx, lambda: add_list(topics.get(topic), "papers", papers_json, date))
 
     @server.tool(description=(
@@ -113,7 +117,7 @@ def build_mcp(topics: Topics) -> MCPServer:
         "to the file (.mp3/.m4a/.wav). The server downloads it. A notebooklm.google.com page link will NOT work. "
         "title = episode title in Hebrew (start with '0 ' for the voice brief so it is first). " + TOPIC_ARG))
     def upload_audio_from_url(ctx: Context, url: str, title: str, date: str = "",
-                              topic: str = DEFAULT_TOPIC) -> dict[str, Any]:
+                              topic: str = "") -> dict[str, Any]:
         def run():
             storage = topics.get(topic)
             return audio_intake.from_url(storage, resolve_date(storage, date, None), url, title)
@@ -125,7 +129,7 @@ def build_mcp(topics: Topics) -> MCPServer:
         "filename = original name with extension (e.g. brief.mp3). title = episode title in Hebrew. " + TOPIC_ARG))
     def upload_audio_base64(ctx: Context, upload_id: str, index: int, total: int, data_base64: str,
                             title: str, filename: str = "audio.mp3", date: str = "",
-                            topic: str = DEFAULT_TOPIC) -> dict[str, Any]:
+                            topic: str = "") -> dict[str, Any]:
         def run():
             storage = topics.get(topic)
             return audio_intake.base64_chunk(storage, resolve_date(storage, date, None), upload_id, index,
@@ -135,7 +139,7 @@ def build_mcp(topics: Topics) -> MCPServer:
     @server.tool(description=(
         "What the site has for a date (default today) in a topic: newsletter items, audio files, podcast links, "
         "YouTube videos, guides, papers, and the days on the site. " + TOPIC_ARG))
-    def get_status(ctx: Context, date: str = "", topic: str = DEFAULT_TOPIC) -> dict[str, Any]:
+    def get_status(ctx: Context, date: str = "", topic: str = "") -> dict[str, Any]:
         def run():
             storage = topics.get(topic)
             return status(storage, resolve_date(storage, date, None)) | {

@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { usePlayer } from './Player.jsx'
 
-// לשונית "YouTube": כרטיס לכל סרטון. לחיצה מנגנת בתוך האתר (youtube-nocookie) ועוצרת את נגן האודיו.
-export default function YoutubeView({ videos }) {
+// לשוניות "YouTube" ו"מדריכים": כרטיס לכל סרטון. לחיצה מנגנת בתוך האתר (youtube-nocookie) ועוצרת את נגן האודיו.
+export default function YoutubeView({ videos, empty }) {
   const [playing, setPlaying] = useState(null)
   const player = usePlayer()
 
-  if (!videos.length) return <p className="empty">אין סרטונים ליום הזה.</p>
+  if (!videos.length) return <p className="empty">{empty}</p>
 
   const play = (v) => {
     if (player.playing) player.toggle()

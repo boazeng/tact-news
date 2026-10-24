@@ -140,12 +140,13 @@ def build_router(topics: Topics) -> APIRouter:
         topic: str = DEFAULT_TOPIC
         podcasts: list | None = None
         youtube: list | None = None
+        guides: list | None = None
 
     @router.post("/api/publish")
     def publish_rest(body: Publish, request: Request):
         """Authorization: Bearer <TACT_NEWS_PUBLISH_TOKEN>. גרוק עצמו מפרסם דרך /mcp — אותה לוגיקה."""
         require_token(request.headers.get("authorization"))
-        return guard(publish, store(body.topic), body.content, body.date, body.podcasts, body.youtube)
+        return guard(publish, store(body.topic), body.content, body.date, body.podcasts, body.youtube, body.guides)
 
     @router.post("/api/publish/audio")
     def publish_audio(request: Request, file: UploadFile = File(...), title: str = Form(""),

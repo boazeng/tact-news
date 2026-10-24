@@ -36,8 +36,8 @@ def page_url(storage: Storage, day: str, tab: str = "") -> str:
 
 
 def publish(storage: Storage, content, date: str = "", podcasts: list | None = None,
-            youtube: list | None = None) -> dict:
-    """content = ה-JSON של הניוזלטר (מחרוזת או אובייקט). podcasts/youtube = רשימות קישורים (לא חובה)."""
+            youtube: list | None = None, guides: list | None = None) -> dict:
+    """content = ה-JSON של הניוזלטר (מחרוזת או אובייקט). podcasts/youtube/guides = רשימות קישורים (לא חובה)."""
     if isinstance(content, dict):
         text, data = json.dumps(content, ensure_ascii=False), content
     else:
@@ -52,6 +52,8 @@ def publish(storage: Storage, content, date: str = "", podcasts: list | None = N
         storage.save_list(day, "links", podcasts)
     if youtube:
         storage.save_list(day, "youtube", youtube)
+    if guides:
+        storage.save_list(day, "guides", guides)
     return status(storage, day) | {"ok": True, "kind": kind}
 
 
@@ -67,11 +69,11 @@ def _as_list(value, what: str) -> list:
 
 
 def add_list(storage: Storage, which: str, items, date: str = "") -> dict:
-    """which = links (פרקי פודקאסט) | youtube. מחליף את הרשימה של היום."""
-    what = "פרקים" if which == "links" else "סרטונים"
+    """which = links (פרקי פודקאסט) | youtube | guides. מחליף את הרשימה של היום."""
+    what = {"links": "פרקים", "youtube": "סרטונים", "guides": "מדריכים"}[which]
     day = resolve_date(storage, date, None)
     count = storage.save_list(day, which, _as_list(items, what))
-    tab = "podcasts" if which == "links" else "youtube"
+    tab = "podcasts" if which == "links" else which
     return {"ok": True, "topic": storage.topic, "date": day, "saved": count, "url": page_url(storage, day, tab)}
 
 
@@ -86,5 +88,6 @@ def status(storage: Storage, day: str) -> dict:
         "audio_files": [p["title"] for p in info["podcasts"]],
         "podcast_links": [link["title"] for link in info["links"]],
         "youtube": [v["title"] for v in info["youtube"]],
+        "guides": [v["title"] for v in info["guides"]],
         "url": page_url(storage, day),
     }

@@ -7,7 +7,7 @@ import Materials from '../components/Materials.jsx'
 import NewsletterView from '../components/NewsletterView.jsx'
 import YoutubeView from '../components/YoutubeView.jsx'
 
-// יום אחד בתחום אחד: כותרת התאריך + שלוש לשוניות (ניוזלטר · פודקאסטים · YouTube)
+// יום אחד בתחום אחד: כותרת התאריך + לשוניות (ניוזלטר · פודקאסטים · YouTube · מדריכים)
 export default function DayPage({ topic, topicName, date, tab, today, latest, navigate }) {
   const [issue, setIssue] = useState(null)
   const [error, setError] = useState('')
@@ -54,6 +54,7 @@ export default function DayPage({ topic, topicName, date, tab, today, latest, na
     newsletter: itemCount(issue),
     podcasts: issue.podcasts.length + issue.links.length,
     youtube: issue.youtube.length,
+    guides: (issue.guides || []).length,
   }
 
   return (
@@ -80,7 +81,8 @@ export default function DayPage({ topic, topicName, date, tab, today, latest, na
 
       {tab === 'newsletter' && <NewsletterView issue={issue} />}
       {tab === 'podcasts' && <PodcastsView issue={issue} date={date} />}
-      {tab === 'youtube' && <YoutubeView videos={issue.youtube} />}
+      {tab === 'youtube' && <YoutubeView videos={issue.youtube} empty="אין סרטונים ליום הזה." />}
+      {tab === 'guides' && <YoutubeView videos={issue.guides || []} empty="אין מדריכים ליום הזה." />}
     </div>
   )
 }

@@ -4,6 +4,7 @@
         newsletter.json | newsletter.html | newsletter.pdf   ← לשונית "ניוזלטר" (אחד בלבד)
         podcasts/<קבצי אודיו> + links.json + materials/      ← לשונית "פודקאסטים"
         youtube.json                                          ← לשונית "YouTube"
+        guides.json                                           ← לשונית "מדריכים" (גם YouTube)
 """
 import json
 import os
@@ -103,6 +104,7 @@ class Storage:
             "materials": _list_files(base / "materials", self.topic, day, "materials"),
             "links": self.load_list(day, "links"),
             "youtube": self.load_list(day, "youtube"),
+            "guides": self.load_list(day, "guides"),
         }
 
     # ───────── writing ─────────
@@ -118,8 +120,9 @@ class Storage:
             # רשימות שגרוק שולח בתוך הניוזלטר → ללשוניות שלהן
             if isinstance(data.get("podcasts"), list):
                 self.save_list(day, "links", data.pop("podcasts"))
-            if isinstance(data.get("youtube"), list):
-                self.save_list(day, "youtube", data.pop("youtube"))
+            for which in ("youtube", "guides"):
+                if isinstance(data.get(which), list):
+                    self.save_list(day, which, data.pop(which))
             src.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         for old in NEWSLETTER_EXTS:
             (base / f"newsletter{old}").unlink(missing_ok=True)
@@ -170,7 +173,7 @@ class Storage:
             tmp.unlink(missing_ok=True)
         return ext[1:]
 
-    # ───────── link lists: links (פרקי פודקאסט) · youtube (סרטונים) ─────────
+    # ───────── link lists: links (פרקי פודקאסט) · youtube (סרטונים) · guides (מדריכים) ─────────
     def load_list(self, day: str, which: str) -> list[dict]:
         p = self.day_dir(day) / f"{which}.json"
         try:
@@ -180,7 +183,7 @@ class Storage:
 
     def save_list(self, day: str, which: str, items: list) -> int:
         """מחליף את הרשימה של היום. מחזיר כמה נשמרו."""
-        parse = {"links": parse_link, "youtube": parse_video}[which]
+        parse = {"links": parse_link, "youtube": parse_video, "guides": parse_video}[which]
         clean = [parse(x) for x in items]
         (self.day_dir(day, create=True) / f"{which}.json").write_text(
             json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -227,7 +230,7 @@ def file_url(topic: str, day: str, kind: str, name: str) -> str:
 
 
 def has_content(info: dict) -> bool:
-    return any(info[k] for k in ("newsletter", "podcasts", "materials", "links", "youtube"))
+    return any(info[k] for k in ("newsletter", "podcasts", "materials", "links", "youtube", "guides"))
 
 
 def safe_name(name: str) -> str:
@@ -350,4 +353,5 @@ def _summary(info: dict) -> dict:
         "podcasts": len(info["podcasts"]) + len(info["links"]),
         "materials": len(info["materials"]),
         "youtube": len(info["youtube"]),
+        "guides": len(info["guides"]),
     }

@@ -20,7 +20,8 @@ from .topics import DEFAULT_TOPIC, Topics
 INSTRUCTIONS = (
     "This is the TACT News site (tact-news.newavera.co.il) — Boaz's daily Hebrew news digest. "
     "Content is organised by topic (default 'ai' = בינה מלאכותית; list_topics shows all) and each day has 3 tabs: "
-    "newsletter, podcasts (voice brief + episodes + podcast links), youtube (video links). "
+    "newsletter, podcasts (voice brief + episodes + podcast links), youtube (video links), "
+    "guides (YouTube how-to / tutorial videos — a separate tab). "
     "Publish the newsletter with publish_newsletter (one call, full JSON — it may already include 'podcasts' and "
     "'youtube'), upload audio with upload_audio_*, and check with get_status. All text in Hebrew. "
     "Days are deleted automatically after 14 days."
@@ -41,9 +42,10 @@ newsletter_json — JSON object (as a string):
   "youtube": [ { "title": "video title", "channel": "channel name",
                  "url": "https://www.youtube.com/watch?v=...", "duration_minutes": 12,
                  "description": "one line in Hebrew: why this video" } ],
+  "guides": [ { same fields as youtube — tutorials / how-to videos, YouTube links only } ],
   "closing": "optional closing line"
 }
-"podcasts" → the Podcasts tab, "youtube" → the YouTube tab (both optional).
+"podcasts" → Podcasts tab, "youtube" → YouTube tab, "guides" → Guides (מדריכים) tab. All optional.
 Publishing again for the same date+topic replaces that day's newsletter."""
 
 TOPIC_ARG = "topic = topic id (default 'ai'; see list_topics)."
@@ -86,6 +88,14 @@ def build_mcp(topics: Topics) -> MCPServer:
         return call(ctx, lambda: add_list(topics.get(topic), "youtube", videos_json, date))
 
     @server.tool(description=(
+        "Set the GUIDES for a day (מדריכים tab — YouTube tutorials / how-to videos; replaces the existing list). "
+        'guides_json = JSON array of {"title","channel","url","duration_minutes","description"}. '
+        "url must be youtube.com or youtu.be. date defaults to today (Israel). " + TOPIC_ARG))
+    def add_guide_links(ctx: Context, guides_json: str, date: str = "",
+                        topic: str = DEFAULT_TOPIC) -> dict[str, Any]:
+        return call(ctx, lambda: add_list(topics.get(topic), "guides", guides_json, date))
+
+    @server.tool(description=(
         "Upload an audio file (voice brief / NotebookLM episode) to the Podcasts tab by giving a DIRECT public link "
         "to the file (.mp3/.m4a/.wav). The server downloads it. A notebooklm.google.com page link will NOT work. "
         "title = episode title in Hebrew (start with '0 ' for the voice brief so it is first). " + TOPIC_ARG))
@@ -111,7 +121,7 @@ def build_mcp(topics: Topics) -> MCPServer:
 
     @server.tool(description=(
         "What the site has for a date (default today) in a topic: newsletter items, audio files, podcast links, "
-        "YouTube videos, and the days on the site. " + TOPIC_ARG))
+        "YouTube videos, guides, and the days on the site. " + TOPIC_ARG))
     def get_status(ctx: Context, date: str = "", topic: str = DEFAULT_TOPIC) -> dict[str, Any]:
         def run():
             storage = topics.get(topic)

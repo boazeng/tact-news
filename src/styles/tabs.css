@@ -82,7 +82,9 @@
 
 @media (max-width: 640px) {
   .tabs { width: 100%; }
-  .tab { flex: 1; justify-content: center; padding: 8px 10px; }
+  .tabs { gap: 2px; padding: 3px; }
+  .tab { flex: 1; justify-content: center; gap: 4px; padding: 8px 4px; font-size: 13.5px; }
+  .tab-n { font-size: 10.5px; padding: 0 5px; line-height: 16px; }
   .topic-btn { padding: 4px 10px; font-size: 13px; }
 }
 

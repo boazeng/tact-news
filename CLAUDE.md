@@ -26,6 +26,7 @@
 - `backend/` — FastAPI. `storage.py` (תיקייה לכל יום, retention, קישורי פודקאסט), `api.py` (נתיבים + `POST /api/publish`), `publish.py` (טוקן + לוגיקת פרסום משותפת), `mcp_server.py` (`/mcp`: list_topics · publish_newsletter · add_podcast_links · add_youtube_links · add_guide_links · add_papers · upload_audio_from_url · upload_audio_base64 · get_status), `topics.py` (תחומי על + הגירה), `audio_intake.py` (אודיו מגרוק: URL / base64 בחתיכות / `POST /api/publish/audio`; חוסם כתובות פנימיות), `media.py` (WAV→M4A), `server.py` (auth + SPA)
 - `src/` — React/Vite RTL. `pages/DayPage` (הגיליון), `pages/AdminPage` (העלאה), `components/Player` (נגן גלובלי — זוכר מיקום ומהירות, Media Session)
 - `docs/GROK-PROMPT.md` — ההוראה לגרוק לפרסם לבד. **מקור יחיד** — דף הניהול מייבא אותו (`?raw`)
+- `docs/CLAUDE-AUTOMATION.md` — **תכנון (טרם בוצע)**: Claude במקום גרוק — Routine בענן לטקסט, Cowork על ה-Mac mini ל-NotebookLM. הפודקאסטים נשארים ב-NotebookLM
 - `samples/2026-10-23.json` — גיליון אמיתי בפורמט, לבדיקות
 
 ## נתונים

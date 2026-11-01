@@ -88,11 +88,14 @@ def collect(sources: list[dict], since: datetime) -> tuple[list[dict], dict]:
         except Exception as e:  # noqa: BLE001 — פיד אחד שנפל לא עוצר את השאר
             return src, [], f"{type(e).__name__}"
 
-    with ThreadPoolExecutor(12) as ex:
-        for src, items, err in ex.map(one, sources):
-            fresh = [i for i in items if i["published"] and i["published"] >= since]
-            stats[src["name"]] = err or len(fresh)
-            found.extend(fresh)
+    with ThreadPoolExecutor(8) as ex:
+        results = list(ex.map(one, sources))
+    # שגיאה רגעית (DNS של הקונטיינר תחת עומס, timeout) → ניסיון נוסף אחד, בזה אחר זה
+    results = [one(src) if err else (src, items, err) for src, items, err in results]
+    for src, items, err in results:
+        fresh = [i for i in items if i["published"] and i["published"] >= since]
+        stats[src["name"]] = err or len(fresh)
+        found.extend(fresh)
     # אותה כתבה בשני פידים → פעם אחת
     seen, unique = set(), []
     for i in sorted(found, key=lambda x: x["published"], reverse=True):

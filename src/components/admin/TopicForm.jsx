@@ -80,8 +80,8 @@ export default function TopicForm({ initial, isNew, onSubmit, onCancel, submitLa
       </div>
 
       <label className="topic-desc-field">
-        <span>מקורות החדשות (שורה לכל מקור) — גרוק וסוכן הערב של Claude מעדיפים אותם</span>
-        <textarea value={form.sources} onChange={set('sources')} rows={4} maxLength={2000} dir="auto"
+        <span>מקורות החדשות — שורה לכל מקור: <code dir="ltr">שם | כתובת-פיד</code>. עדכון הערב אוסף רק ממקורות עם פיד</span>
+        <textarea value={form.sources} onChange={set('sources')} rows={6} maxLength={6000} dir="ltr"
           placeholder={'Reuters\nTechCrunch\nגלובס'} />
       </label>
 

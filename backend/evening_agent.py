@@ -1,92 +1,40 @@
-"""עדכון ערב — סוכן Claude שמוסיף לגיליון של היום ידיעות שפורסמו מאז הבוקר.
+"""עדכון ערב — מוסיף לגיליון של היום ידיעות שפורסמו מאז הבוקר.
 
-גרוק מפרסם את גיליון הבוקר. בשעה EVENING_TIME (ברירת מחדל 19:00, שעון ישראל) הסוכן עובר על כל תחום
-שיש בו לשונית ניוזלטר, מחפש ברשת (בעיקר במקורות של התחום — שדה sources בתחום), ומחזיר רק ידיעות חדשות.
-הקוד ממזג אותן לראש הקטגוריות עם הקידומת "🆕 עדכון ערב: " ומפרסם מחדש — שום דבר מהבוקר לא נמחק.
+גרוק מפרסם את גיליון הבוקר. בשעה EVENING_TIME (ברירת מחדל 19:00, שעון ישראל), לכל תחום שיש בו לשונית ניוזלטר:
+1. הקוד אוסף מהפידים של המקורות (שדה sources: "שם | כתובת-פיד") את מה שפורסם ב-WINDOW_HOURS האחרונות — בחינם.
+2. Claude בוחר מהרשימה את החשוב ומשייך לקטגוריות (editor.select).
+3. הקוד מתרגם קישורי Google News לכתובת הכתבה ומוריד את הטקסט שלה.
+4. Claude כותב כותרת, תקציר והרחבה בעברית מתוך הטקסט (editor.write).
+5. הקוד ממזג לראש הקטגוריות עם הקידומת "🆕 עדכון ערב: " ומפרסם מחדש — שום דבר מהבוקר לא נמחק.
 
+בלי חיפוש ברשת — הקישורים והתאריכים מגיעים מהפידים, וזה גם מה שמחזיק את העלות נמוכה.
 מפתח: ANTHROPIC_API_KEY ב-.env של האתר. יומן ריצות: database/agent_runs.json.
 """
 import json
 import logging
 import os
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from .storage import StorageError, today
+from . import editor, feeds
+from .storage import today
 from .topics import Topics
 
 logger = logging.getLogger("tact-news")
 
 IL = ZoneInfo("Asia/Jerusalem")
-MODEL = os.getenv("AGENT_MODEL", "claude-opus-5-5")
+MODEL = editor.MODEL
 EVENING_TIME = os.getenv("EVENING_TIME", "19:00")
+WINDOW_HOURS = int(os.getenv("EVENING_WINDOW_HOURS", "20"))   # 19:00 → מ-23:00 אתמול
 PREFIX = "🆕 עדכון ערב: "
-MAX_ITEMS = 20          # לתחום, לריצה
-# תקציב כלים לתחום. 10/6 היה מעט מדי (1.11: ארבעה מחמשת התחומים נעצרו באמצע החיפוש)
-MAX_SEARCHES = int(os.getenv("AGENT_MAX_SEARCHES", "25"))
-MAX_FETCHES = int(os.getenv("AGENT_MAX_FETCHES", "12"))
-MAX_TURNS = 12          # סבבי API לתחום (pause_turn + תזכורת אחת)
+MAX_CANDIDATES = 160    # כותרות שנשלחות לבחירה, לתחום
+MAX_ITEMS = 18          # ידיעות לתחום, לריצה
 KEEP_RUNS = 60
-# הערכת עלות בלבד — המחיר המחייב בקונסול של Anthropic. $ למיליון טוקנים: (קלט, פלט)
-PRICES = {"claude-opus-5-5": (4, 20), "claude-sonnet-5-5": (2, 10), "claude-haiku-5-5": (0.10, 0.50)}
-HAIKU_LONG = (0.50, 2.50)   # Haiku 5.5 — בקשה מעל 100K טוקני קלט
-PRICE_SEARCH = 10 / 1000
 
 _run_lock = threading.Lock()
-
-SUBMIT_TOOL = {
-    "name": "submit_evening_update",
-    "description": "מגיש את הידיעות החדשות של הערב לתחום. קוראים לו פעם אחת, בסוף, גם אם אין ידיעות (רשימה ריקה).",
-    "strict": True,
-    "input_schema": {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["note", "items"],
-        "properties": {
-            "note": {"type": "string", "description": "שורה-שתיים: מה בדקת, ולמה נבחרו (או לא נבחרו) ידיעות"},
-            "items": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": ["section", "title", "summary", "details", "source_url", "source_name"],
-                    "properties": {
-                        "section": {"type": "string", "description": "שם קטגוריה מהגיליון, או שם קצר חדש"},
-                        "title": {"type": "string", "description": "כותרת בעברית, בלי הקידומת 'עדכון ערב'"},
-                        "summary": {"type": "string", "description": "2–4 משפטים בעברית"},
-                        "details": {"type": "string", "description": "הרחבה בעברית. פסקה חדשה = \\n"},
-                        "source_url": {"type": "string", "description": "הכתובת של הכתבה עצמה"},
-                        "source_name": {"type": "string", "description": "שם המקור, למשל Reuters"},
-                    },
-                },
-            },
-        },
-    },
-}
-
-SYSTEM = """אתה עורך החדשות של עדכון הערב באתר TACT News. גיליון הבוקר כבר פורסם; התפקיד שלך הוא להשלים אותו בכל מה שחדש.
-
-איך עובדים:
-- עבור על **כל קטגוריה** בגיליון (חוץ מ"מעקב פייסבוק") ועל הנושאים בתיאור התחום, ולכל אחת חפש 1–3 ידיעות חדשות. קטגוריה שאין בה חדש — מדלגים.
-- חדש = פורסם ב-24 השעות האחרונות ולא מופיע בגיליון. עדיפות למה שפורסם היום אחרי הבוקר.
-- העדף את המקורות של התחום; מקור אחר מותר כשהוא אמין והידיעה חשובה. מקורות ישראליים — גם הם.
-- חפש ביעילות: חיפוש ממוקד לכל קטגוריה או מקור. קרא כתבה (web_fetch) רק כשתוצאת החיפוש לא מספיקה כדי לכתוב סיכום מדויק — לא כל ידיעה צריכה קריאה מלאה.
-- כמות: בתחום עמוס בדרך כלל 8–15 ידיעות, בתחום שקט פחות. לכל היותר 20.
-
-כללים:
-- אל תחזור על ידיעה שכבר בגיליון (גם לא בניסוח אחר). עדכון משמעותי לסיפור שכבר הופיע — מותר, וכתוב בכותרת שזה עדכון.
-- רק ידיעות אמיתיות שמצאת בחיפוש. source_url = הכתבה עצמה (לא דף בית, לא דף חיפוש). אל תמציא כתובות, ציטוטים או מספרים.
-- לא פייסבוק ולא רשתות חברתיות — את אלה מכסה מישהו אחר.
-- הכול בעברית (שמות חברות ומוצרים כמקובל). summary: 2–4 משפטים. details: הרחבה של 2–4 פסקאות — מה קרה, הרקע, למה זה חשוב.
-- section: שם של קטגוריה קיימת בגיליון כשהידיעה מתאימה לה; אחרת שם קצר חדש.
-- בסוף קרא ל-submit_evening_update פעם אחת עם כל הידיעות."""
-
-
-def _client():
-    import anthropic  # noqa: PLC0415 — רק כשהסוכן רץ
-    return anthropic.Anthropic(timeout=600, max_retries=3)
 
 
 # ───────────────────────── יומן ריצות ─────────────────────────
@@ -167,99 +115,61 @@ def _run_topic(topics: Topics, topic: dict) -> dict:
     if newsletter and newsletter["kind"] != "json":
         return {"topic": topic["id"], "skipped": f"הגיליון של היום הוא {newsletter['kind']} — אין מיזוג"}
     data = (newsletter or {}).get("data") or {"title": f"חדשות לבועז — {topic['name']}", "sections": []}
+    sources = feeds.parse_sources(topic.get("sources", ""))
+    if not sources:
+        return {"topic": topic["id"], "skipped": "אין פידים ברשימת המקורות"}
 
-    items, usage = _ask_claude(topic, data, day)
+    # 1. איסוף — בלי מודל
+    since = datetime.now(IL) - timedelta(hours=WINDOW_HOURS)
+    found, stats = feeds.collect(sources, since)
+    sections = data.get("sections") or []
+    morning = [i for s in sections for i in s.get("items", [])]
+    known_titles = {feeds.norm_title(i.get("title", "").removeprefix(PREFIX)) for i in morning}
+    known_urls = {_norm_url(i.get("source_url", "")) for i in morning}
+    candidates = [c for c in found if feeds.norm_title(c["title"]) not in known_titles
+                  and _norm_url(c["url"]) not in known_urls][:MAX_CANDIDATES]
+    result = {"topic": topic["id"], "model": MODEL, "feeds": len(sources),
+              "feeds_failed": [n for n, v in stats.items() if isinstance(v, str)],
+              "candidates": len(candidates), "added": 0}
+    usage = {"input": 0, "output": 0, "cost": 0.0}
+    if not candidates:
+        return result | {"note": "אין ידיעות חדשות בפידים", "cost_usd": 0}
+
+    # 2. בחירה
+    now = datetime.now(IL).strftime("%H:%M")
+    picks, note = editor.select(topic, [i.get("title", "") for i in morning],
+                                [s.get("name", "") for s in sections], candidates, now, usage)
+    chosen = []
+    for p in picks[:MAX_ITEMS]:
+        c = dict(candidates[p["id"]])
+        c["section"] = p["section"]
+        chosen.append(c)
+
+    # 3. כתובת אמיתית + טקסט הכתבה — בלי מודל
+    def enrich(c):
+        if c["gnews"]:
+            c["url"] = feeds.resolve_url(c["url"])
+        c["text"] = feeds.article_text(c["url"])
+        return c
+    with ThreadPoolExecutor(8) as ex:
+        chosen = list(ex.map(enrich, chosen))
+
+    # 4. כתיבה
+    written = editor.write(topic, chosen, usage) if chosen else {}
+    items = []
+    for i, c in enumerate(chosen):
+        w = written.get(i)
+        if w and w.get("title") and w.get("summary"):
+            items.append({"section": c["section"], "title": w["title"], "summary": w["summary"],
+                          "details": w.get("details", ""), "source_url": c["url"], "source_name": c["source"]})
+
+    # 5. מיזוג ופרסום
     added = _merge(data, items)
     if added:
         storage.publish_text(day, json.dumps(data, ensure_ascii=False))
-    usage["cost_usd"] = round(usage.pop("cost") + usage["searches"] * PRICE_SEARCH, 3)
-    return {"topic": topic["id"], "model": MODEL, "proposed": len(items), "added": added, **usage}
-
-
-def _brief(topic: dict, data: dict, day: str) -> str:
-    sections = data.get("sections") or []
-    seen = "\n".join(
-        f"- [{s.get('name', '')}] {i.get('title', '')} — {i.get('source_url', '')}"
-        for s in sections for i in s.get("items", [])
-    ) or "(אין עדיין גיליון היום — כל ידיעה חשובה מהיום היא חדשה)"
-    names = ", ".join(s.get("name", "") for s in sections) or "(אין)"
-    sources = (topic.get("sources") or "").strip() or "(לא הוגדרו — בחר מקורות אמינים בתחום)"
-    return (
-        f"התחום: {topic['name']} ({topic['id']})\n"
-        f"מה מכסים בו:\n{topic.get('description') or topic['name']}\n\n"
-        f"המקורות של התחום:\n{sources}\n\n"
-        f"היום: {day}, השעה עכשיו בישראל: {datetime.now(IL):%H:%M}.\n"
-        f"הקטגוריות בגיליון: {names}\n\n"
-        f"מה כבר פורסם היום (אל תחזור על זה):\n{seen}"
-    )
-
-
-def _model_args(model: str) -> dict:
-    """Haiku: כלי החיפוש הבסיסיים (בלי סינון דינמי) ובלי fallback בצד השרת. Opus/Sonnet: הגרסאות החדשות + fallback."""
-    if model.startswith("claude-haiku"):
-        return {"search": "web_search_20250305", "fetch": "web_fetch_20250910", "extra": {}}
-    return {"search": "web_search_20260209", "fetch": "web_fetch_20260209",
-            "extra": {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}}
-
-
-def _ask_claude(topic: dict, data: dict, day: str, model: str = "") -> tuple[list[dict], dict]:
-    model = model or MODEL
-    client = _client()
-    cfg = _model_args(model)
-    tools = [
-        {"type": cfg["search"], "name": "web_search", "max_uses": MAX_SEARCHES},
-        {"type": cfg["fetch"], "name": "web_fetch", "max_uses": MAX_FETCHES},
-        SUBMIT_TOOL,
-    ]
-    messages = [{"role": "user", "content": _brief(topic, data, day)}]
-    usage = {"input": 0, "output": 0, "searches": 0, "fetches": 0, "cost": 0.0}
-    nudged = False
-    for _ in range(MAX_TURNS):
-        resp = client.beta.messages.create(
-            model=model, max_tokens=16000, system=SYSTEM, tools=tools, messages=messages,
-            thinking={"type": "adaptive"}, output_config={"effort": "medium"}, **cfg["extra"],
-        )
-        _add_usage(usage, resp.usage, model)
-        messages.append({"role": "assistant", "content": resp.content})
-        submit = next((b for b in resp.content if b.type == "tool_use" and b.name == SUBMIT_TOOL["name"]), None)
-        if submit:
-            usage["note"] = str(submit.input.get("note", ""))[:400]
-            return [i for i in (submit.input.get("items") or []) if _valid(i)][:MAX_ITEMS], usage
-        if resp.stop_reason == "refusal":
-            raise StorageError("Claude סירב לבקשה")
-        if resp.stop_reason == "pause_turn":
-            continue  # הלולאה בצד השרת עצרה באמצע — שולחים שוב והיא ממשיכה
-        if resp.stop_reason == "tool_use":
-            # כלי לקוח אחר מאשר submit לא קיים — עונים בשגיאה כדי שימשיך
-            messages.append({"role": "user", "content": [
-                {"type": "tool_result", "tool_use_id": b.id, "content": "כלי לא מוכר", "is_error": True}
-                for b in resp.content if b.type == "tool_use"]})
-            continue
-        if nudged:
-            break
-        nudged = True
-        messages.append({"role": "user", "content": "סיים עכשיו: קרא ל-submit_evening_update עם הידיעות שמצאת."})
-    raise StorageError("Claude לא הגיש ידיעות")
-
-
-def _add_usage(usage: dict, u, model: str) -> None:
-    tokens_in = (u.input_tokens or 0) + (getattr(u, "cache_read_input_tokens", 0) or 0) \
-        + (getattr(u, "cache_creation_input_tokens", 0) or 0)
-    usage["input"] += tokens_in
-    usage["output"] += u.output_tokens or 0
-    p_in, p_out = PRICES.get(model, PRICES["claude-opus-5-5"])
-    if model.startswith("claude-haiku") and tokens_in > 100_000:
-        p_in, p_out = HAIKU_LONG
-    usage["cost"] += (tokens_in * p_in + (u.output_tokens or 0) * p_out) / 1e6
-    stu = getattr(u, "server_tool_use", None)
-    if stu:
-        usage["searches"] += getattr(stu, "web_search_requests", 0) or 0
-        usage["fetches"] += getattr(stu, "web_fetch_requests", 0) or 0
-
-
-def _valid(item: dict) -> bool:
-    url = str(item.get("source_url", ""))
-    return bool(item.get("title")) and bool(item.get("summary")) and url.startswith(("https://", "http://"))
+    return result | {"picked": len(chosen), "added": added, "note": note,
+                     "with_text": sum(1 for c in chosen if len(c.get("text", "")) > 300),
+                     "input": usage["input"], "output": usage["output"], "cost_usd": round(usage["cost"], 3)}
 
 
 def _norm_url(url: str) -> str:

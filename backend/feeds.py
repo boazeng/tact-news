@@ -8,6 +8,8 @@ import html
 import json
 import logging
 import re
+import threading
+import time
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -21,6 +23,9 @@ UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/130 Safari/537.36")
 TIMEOUT = 20
 MAX_PER_FEED = 40
+GOOGLE_GAP = 1.5      # שניות בין בקשות לגוגל — אחרת 429
+_google_lock = threading.Lock()
+_google_last = [0.0]
 
 
 def parse_sources(text: str) -> list[dict]:
@@ -104,10 +109,21 @@ def norm_title(title: str) -> str:
 
 
 # ───────── Google News → כתובת הכתבה ─────────
+def _google_slot() -> None:
+    """בקשה אחת לגוגל בכל פעם, ברווח של GOOGLE_GAP."""
+    with _google_lock:
+        wait = _google_last[0] + GOOGLE_GAP - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        _google_last[0] = time.monotonic()
+
+
 def resolve_url(url: str) -> str:
+    """לא הצליח (429, שינוי אצל גוגל) → קישור גוגל, שגם הוא פותח את הכתבה בדפדפן."""
     if "news.google.com" not in url or "/articles/" not in url:
         return url
     try:
+        _google_slot()
         aid = url.split("/articles/")[1].split("?")[0]
         _, page = _get("https://news.google.com/articles/" + aid, limit=800_000)
         page = page.decode("utf-8", "ignore")
@@ -118,6 +134,7 @@ def resolve_url(url: str) -> str:
         inner = ["garturlreq", [["X", "X", ["X", "X"], None, None, 1, 1, "US:en", None, 1, None, None, None, None, None,
                                  0, 1], "X", "X", 1, [1, 1, 1], 1, 1, None, 0, 0, None, 0],
                  aid, int(ts.group(1)), sg.group(1)]
+        _google_slot()
         body = "f.req=" + urllib.parse.quote(json.dumps([[["Fbv4je", json.dumps(inner), None, "generic"]]]))
         _, resp = _get("https://news.google.com/_/DotsSplashUi/data/batchexecute", data=body.encode(),
                        headers={"Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"})

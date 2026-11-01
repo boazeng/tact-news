@@ -14,8 +14,9 @@ import json
 import logging
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -32,6 +33,8 @@ MARGIN = timedelta(minutes=30)      # חפיפה קטנה עם החלון הקו
 PREFIXES = ("🆕 עדכון בוקר: ", "🆕 עדכון ערב: ")
 MAX_CANDIDATES = 160    # כותרות שנשלחות לבחירה, לתחום
 MAX_ITEMS = 18          # ידיעות לתחום, לריצה
+WAIT_STEP = 15 * 60     # בבוקר: תחום שגרוק עוד לא פרסם לו גיליון — בודקים שוב כל 15 דקות
+WAIT_MAX = 2 * 3600     # ...עד שעתיים. אחרי זה מדלגים — לא יוצרים גיליון שגרוק ימחק כשיפרסם
 KEEP_RUNS = 60
 
 _run_lock = threading.Lock()
@@ -90,18 +93,29 @@ def run_evening(topics: Topics, only: str = "", trigger: str = "schedule") -> di
                "trigger": trigger, "model": MODEL, "date": today().isoformat(),
                "since": since.isoformat(timespec="minutes"), "topics": []}
         _save_run(topics, run)
-        for t in topics.listing():
-            if only and t["id"] != only:
-                continue
-            if "newsletter" not in t["tabs"]:
-                continue
-            try:
-                result = _run_topic(topics, t, since, prefix)
-            except Exception as e:  # noqa: BLE001 — תחום אחד לא עוצר את השאר
-                logger.exception("עדכון ערב נכשל בתחום %s", t["id"])
-                result = {"topic": t["id"], "error": str(e)[:300]}
-            run["topics"].append(result)
-            _save_run(topics, run)
+        pending = [t for t in topics.listing() if (not only or t["id"] == only) and "newsletter" in t["tabs"]]
+        deadline = time.monotonic() + WAIT_MAX
+        while pending:
+            waiting = []
+            for t in pending:
+                try:
+                    result = _run_topic(topics, t, since, prefix)
+                except Exception as e:  # noqa: BLE001 — תחום אחד לא עוצר את השאר
+                    logger.exception("עדכון נכשל בתחום %s", t["id"])
+                    result = {"topic": t["id"], "error": str(e)[:300]}
+                if result.get("waiting"):
+                    waiting.append(t)
+                    continue
+                run["topics"].append(result)
+                _save_run(topics, run)
+            if waiting and time.monotonic() + WAIT_STEP > deadline:
+                for t in waiting:
+                    run["topics"].append({"topic": t["id"], "skipped": "גרוק לא פרסם גיליון בוקר בזמן — לא נוסף עדכון"})
+                waiting = []
+            if waiting:
+                logger.info("עדכון בוקר: מחכים לגיליון של גרוק — %s", ", ".join(t["id"] for t in waiting))
+                time.sleep(WAIT_STEP)
+            pending = waiting
         run["finished"] = datetime.now(IL).isoformat(timespec="seconds")
         run["cost_usd"] = round(sum(r.get("cost_usd", 0) for r in run["topics"]), 2)
         _save_run(topics, run)
@@ -115,6 +129,9 @@ def _run_topic(topics: Topics, topic: dict, since: datetime, prefix: str) -> dic
     storage = topics.get(topic["id"])
     day = today().isoformat()
     newsletter = storage.day_info(day)["newsletter"]
+    if not newsletter and prefix == PREFIXES[0]:
+        # בוקר, יום חדש, גרוק עוד לא פרסם: גיליון שניצור עכשיו יימחק כשגרוק יפרסם — מחכים לו
+        return {"topic": topic["id"], "waiting": True}
     if newsletter and newsletter["kind"] != "json":
         return {"topic": topic["id"], "skipped": f"הגיליון של היום הוא {newsletter['kind']} — אין מיזוג"}
     data = (newsletter or {}).get("data") or {"title": f"חדשות לבועז — {topic['name']}", "sections": []}
@@ -126,6 +143,11 @@ def _run_topic(topics: Topics, topic: dict, since: datetime, prefix: str) -> dic
     found, stats = feeds.collect(sources, since)
     sections = data.get("sections") or []
     morning = [i for s in sections for i in s.get("items", [])]
+    # העדכון של אתמול בערב נמצא בגיליון של אתמול — גם הוא "כבר פורסם" (החלון של 07:00 מתחיל ב-18:30 אתמול)
+    yesterday = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
+    y_data = (storage.day_info(yesterday)["newsletter"] or {}).get("data") or {}
+    morning += [i for s in y_data.get("sections", []) for i in s.get("items", [])
+                if str(i.get("title", "")).startswith("🆕")]
     known_titles = {feeds.norm_title(_strip_prefix(i.get("title", ""))) for i in morning}
     known_urls = {_norm_url(i.get("source_url", "")) for i in morning}
     candidates = [c for c in found if feeds.norm_title(c["title"]) not in known_titles

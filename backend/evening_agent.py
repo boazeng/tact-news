@@ -29,8 +29,10 @@ MAX_SEARCHES = int(os.getenv("AGENT_MAX_SEARCHES", "25"))
 MAX_FETCHES = int(os.getenv("AGENT_MAX_FETCHES", "12"))
 MAX_TURNS = 12          # סבבי API לתחום (pause_turn + תזכורת אחת)
 KEEP_RUNS = 60
-# הערכת עלות בלבד — המחיר המחייב בקונסול של Anthropic
-PRICE_IN, PRICE_OUT, PRICE_SEARCH = 4 / 1e6, 20 / 1e6, 10 / 1000
+# הערכת עלות בלבד — המחיר המחייב בקונסול של Anthropic. $ למיליון טוקנים: (קלט, פלט)
+PRICES = {"claude-opus-5-5": (4, 20), "claude-sonnet-5-5": (2, 10), "claude-haiku-5-5": (0.10, 0.50)}
+HAIKU_LONG = (0.50, 2.50)   # Haiku 5.5 — בקשה מעל 100K טוקני קלט
+PRICE_SEARCH = 10 / 1000
 
 _run_lock = threading.Lock()
 
@@ -170,8 +172,8 @@ def _run_topic(topics: Topics, topic: dict) -> dict:
     added = _merge(data, items)
     if added:
         storage.publish_text(day, json.dumps(data, ensure_ascii=False))
-    cost = (usage["input"] * PRICE_IN + usage["output"] * PRICE_OUT + usage["searches"] * PRICE_SEARCH)
-    return {"topic": topic["id"], "proposed": len(items), "added": added, **usage, "cost_usd": round(cost, 3)}
+    usage["cost_usd"] = round(usage.pop("cost") + usage["searches"] * PRICE_SEARCH, 3)
+    return {"topic": topic["id"], "model": MODEL, "proposed": len(items), "added": added, **usage}
 
 
 def _brief(topic: dict, data: dict, day: str) -> str:
@@ -192,23 +194,32 @@ def _brief(topic: dict, data: dict, day: str) -> str:
     )
 
 
-def _ask_claude(topic: dict, data: dict, day: str) -> tuple[list[dict], dict]:
+def _model_args(model: str) -> dict:
+    """Haiku: כלי החיפוש הבסיסיים (בלי סינון דינמי) ובלי fallback בצד השרת. Opus/Sonnet: הגרסאות החדשות + fallback."""
+    if model.startswith("claude-haiku"):
+        return {"search": "web_search_20250305", "fetch": "web_fetch_20250910", "extra": {}}
+    return {"search": "web_search_20260209", "fetch": "web_fetch_20260209",
+            "extra": {"betas": ["server-side-fallback-2026-07-01"], "fallbacks": "default"}}
+
+
+def _ask_claude(topic: dict, data: dict, day: str, model: str = "") -> tuple[list[dict], dict]:
+    model = model or MODEL
     client = _client()
+    cfg = _model_args(model)
     tools = [
-        {"type": "web_search_20260209", "name": "web_search", "max_uses": MAX_SEARCHES},
-        {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": MAX_FETCHES},
+        {"type": cfg["search"], "name": "web_search", "max_uses": MAX_SEARCHES},
+        {"type": cfg["fetch"], "name": "web_fetch", "max_uses": MAX_FETCHES},
         SUBMIT_TOOL,
     ]
     messages = [{"role": "user", "content": _brief(topic, data, day)}]
-    usage = {"input": 0, "output": 0, "searches": 0, "fetches": 0}
+    usage = {"input": 0, "output": 0, "searches": 0, "fetches": 0, "cost": 0.0}
     nudged = False
     for _ in range(MAX_TURNS):
         resp = client.beta.messages.create(
-            model=MODEL, max_tokens=16000, system=SYSTEM, tools=tools, messages=messages,
-            thinking={"type": "adaptive"}, output_config={"effort": "medium"},
-            betas=["server-side-fallback-2026-07-01"], fallbacks="default",
+            model=model, max_tokens=16000, system=SYSTEM, tools=tools, messages=messages,
+            thinking={"type": "adaptive"}, output_config={"effort": "medium"}, **cfg["extra"],
         )
-        _add_usage(usage, resp.usage)
+        _add_usage(usage, resp.usage, model)
         messages.append({"role": "assistant", "content": resp.content})
         submit = next((b for b in resp.content if b.type == "tool_use" and b.name == SUBMIT_TOOL["name"]), None)
         if submit:
@@ -231,10 +242,15 @@ def _ask_claude(topic: dict, data: dict, day: str) -> tuple[list[dict], dict]:
     raise StorageError("Claude לא הגיש ידיעות")
 
 
-def _add_usage(usage: dict, u) -> None:
-    usage["input"] += (u.input_tokens or 0) + (getattr(u, "cache_read_input_tokens", 0) or 0) \
+def _add_usage(usage: dict, u, model: str) -> None:
+    tokens_in = (u.input_tokens or 0) + (getattr(u, "cache_read_input_tokens", 0) or 0) \
         + (getattr(u, "cache_creation_input_tokens", 0) or 0)
+    usage["input"] += tokens_in
     usage["output"] += u.output_tokens or 0
+    p_in, p_out = PRICES.get(model, PRICES["claude-opus-5-5"])
+    if model.startswith("claude-haiku") and tokens_in > 100_000:
+        p_in, p_out = HAIKU_LONG
+    usage["cost"] += (tokens_in * p_in + (u.output_tokens or 0) * p_out) / 1e6
     stu = getattr(u, "server_tool_use", None)
     if stu:
         usage["searches"] += getattr(stu, "web_search_requests", 0) or 0

@@ -69,7 +69,7 @@ export default function AgentPanel({ topics, onChanged }) {
                 <td>{r.trigger === 'schedule' ? 'מתוזמן' : 'ידני'}</td>
                 <td>
                   {r.topics.map((t) => (
-                    <div key={t.topic} title={t.error || t.skipped || ''}>
+                    <div key={t.topic} title={t.error || t.skipped || t.note || ''}>
                       {names[t.topic] || t.topic}: {t.error ? `שגיאה — ${t.error}` : t.skipped ? 'דולג' : `+${t.added}`}
                     </div>
                   ))}

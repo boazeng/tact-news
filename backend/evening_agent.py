@@ -38,8 +38,9 @@ SUBMIT_TOOL = {
     "input_schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["items"],
+        "required": ["note", "items"],
         "properties": {
+            "note": {"type": "string", "description": "שורה-שתיים: מה בדקת, ולמה נבחרו (או לא נבחרו) ידיעות"},
             "items": {
                 "type": "array",
                 "items": {
@@ -186,8 +187,8 @@ def _brief(topic: dict, data: dict, day: str) -> str:
 def _ask_claude(topic: dict, data: dict, day: str) -> tuple[list[dict], dict]:
     client = _client()
     tools = [
-        {"type": "web_search_20260209", "name": "web_search", "max_uses": 15},
-        {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 10},
+        {"type": "web_search_20260209", "name": "web_search", "max_uses": 10},
+        {"type": "web_fetch_20260209", "name": "web_fetch", "max_uses": 6},
         SUBMIT_TOOL,
     ]
     messages = [{"role": "user", "content": _brief(topic, data, day)}]
@@ -203,6 +204,7 @@ def _ask_claude(topic: dict, data: dict, day: str) -> tuple[list[dict], dict]:
         messages.append({"role": "assistant", "content": resp.content})
         submit = next((b for b in resp.content if b.type == "tool_use" and b.name == SUBMIT_TOOL["name"]), None)
         if submit:
+            usage["note"] = str(submit.input.get("note", ""))[:400]
             return [i for i in (submit.input.get("items") or []) if _valid(i)][:MAX_ITEMS], usage
         if resp.stop_reason == "refusal":
             raise StorageError("Claude סירב לבקשה")

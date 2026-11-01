@@ -47,11 +47,11 @@ export default function TopicsManager({ topics, onChanged }) {
           <li key={t.id} className={`topic-row${editing === t.id ? ' is-editing' : ''}`}>
             {editing === t.id ? (
               <TopicForm
-                initial={{ id: t.id, name: t.name, color: t.color, description: t.description || '', tabs: t.tabs }}
+                initial={{ id: t.id, name: t.name, color: t.color, description: t.description || '', sources: t.sources || '', tabs: t.tabs }}
                 submitLabel="שמירה"
                 onCancel={() => setEditing(null)}
                 onSubmit={async (f) => {
-                  await editTopic(t.id, { name: f.name, color: f.color, description: f.description, tabs: f.tabs })
+                  await editTopic(t.id, { name: f.name, color: f.color, description: f.description, tabs: f.tabs, sources: f.sources })
                   setEditing(null)
                   setMsg(`התחום "${f.name}" עודכן ✓`)
                   onChanged()

@@ -7,3 +7,4 @@ mcp>=2.2,<3            # /mcp — גרוק מפרסם דרך custom connector
 tzdata                 # Asia/Jerusalem בתוך python:slim
 # Google sign-in + roles (pulls httpx, itsdangerous, fastapi)
 shared-auth @ git+https://github.com/boazeng/shared-auth.git
+anthropic>=0.116,<1    # סוכן עדכון הערב (backend/evening_agent.py)

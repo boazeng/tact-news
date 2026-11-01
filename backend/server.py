@@ -30,6 +30,7 @@ from fastapi import FastAPI, HTTPException  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from shared_auth import install_auth  # noqa: E402
 
+from . import evening_agent  # noqa: E402
 from .api import build_router  # noqa: E402
 from .mcp_server import install_mcp  # noqa: E402
 from .topics import Topics  # noqa: E402
@@ -56,12 +57,28 @@ async def _retention_loop():
         await asyncio.sleep(3600)
 
 
+async def _evening_loop():
+    """עדכון ערב של Claude — כל יום ב-EVENING_TIME (שעון ישראל). בלי ANTHROPIC_API_KEY — כבוי."""
+    while True:
+        await asyncio.sleep(evening_agent.seconds_until_evening())
+        if not os.getenv("ANTHROPIC_API_KEY"):
+            logger.warning("עדכון ערב: אין ANTHROPIC_API_KEY — מדלגים")
+            await asyncio.sleep(60)
+            continue
+        try:
+            await asyncio.to_thread(evening_agent.run_evening, topics, "", "schedule")
+        except Exception:  # noqa: BLE001
+            logger.exception("עדכון ערב נכשל")
+        await asyncio.sleep(60)   # לא לרוץ פעמיים באותה דקה
+
+
 @asynccontextmanager
 async def lifespan(_app):
-    task = asyncio.create_task(_retention_loop())
+    tasks = [asyncio.create_task(_retention_loop()), asyncio.create_task(_evening_loop())]
     async with mcp_lifespan():
         yield
-    task.cancel()
+    for task in tasks:
+        task.cancel()
 
 
 app = FastAPI(title="TACT News", docs_url=None, redoc_url=None, lifespan=lifespan)

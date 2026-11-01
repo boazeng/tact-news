@@ -28,6 +28,7 @@ SEED = [
 LEGACY_TOPIC = "ai"   # לשם הועברו הימים מלפני התחומים, ולשם מפנות כתובות /files ישנות
 
 MAX_DESCRIPTION = 1500
+MAX_SOURCES = 2000      # מקורות החדשות של התחום — שורה לכל מקור (גרוק וסוכן הערב של Claude)
 # הלשוניות שאפשר להפעיל בכל תחום. tabs של תחום = מה גרוק ממלא בו ומה מוצג באתר.
 TAB_IDS = ("newsletter", "podcasts", "youtube", "guides", "papers")
 _ID_RE = re.compile(r"^[a-z][a-z0-9-]{1,23}$")
@@ -60,11 +61,12 @@ class Topics:
         return list(self._stores.values())
 
     def listing(self) -> list[dict]:
-        return [dict(t, default=i == 0, tabs=t.get("tabs") or list(TAB_IDS)) for i, t in enumerate(self._list)]
+        return [dict(t, default=i == 0, tabs=t.get("tabs") or list(TAB_IDS), sources=t.get("sources", ""))
+                for i, t in enumerate(self._list)]
 
     # ───────── ניהול ─────────
     def add(self, tid: str, name: str, color: str = "", description: str = "",
-            tabs: list[str] | None = None) -> dict:
+            tabs: list[str] | None = None, sources: str = "") -> dict:
         tid = (tid or "").strip().lower()
         name = (name or "").strip()
         if not _ID_RE.match(tid):
@@ -82,7 +84,8 @@ class Topics:
             if any(t["name"] == name for t in self._list):
                 raise StorageError(f'כבר יש תחום בשם "{name}"')
             topic = {"id": tid, "name": name, "color": color or "#475569",
-                     "description": (description or "").strip()[:MAX_DESCRIPTION], "tabs": tabs}
+                     "description": (description or "").strip()[:MAX_DESCRIPTION], "tabs": tabs,
+                     "sources": (sources or "").strip()[:MAX_SOURCES]}
             self._list.append(topic)
             self._save()
             self._stores[tid] = Storage(self.data_dir, tid)
@@ -90,8 +93,9 @@ class Topics:
         return topic
 
     def update(self, tid: str, name: str, color: str = "", description: str = "",
-               tabs: list[str] | None = None) -> dict:
-        """עריכת שם, צבע, תיאור ולשוניות. המזהה לא משתנה — הכתובות והימים השמורים קשורים אליו."""
+               tabs: list[str] | None = None, sources: str | None = None) -> dict:
+        """עריכת שם, צבע, תיאור, לשוניות ומקורות. המזהה לא משתנה — הכתובות והימים השמורים קשורים אליו.
+        tabs/sources = None → לא משתנים."""
         name = (name or "").strip()
         if not name or len(name) > 40:
             raise StorageError("צריך שם לתחום (עד 40 תווים)")
@@ -108,6 +112,8 @@ class Topics:
                          description=(description or "").strip()[:MAX_DESCRIPTION])
             if clean_tabs is not None:
                 topic["tabs"] = clean_tabs
+            if sources is not None:
+                topic["sources"] = sources.strip()[:MAX_SOURCES]
             self._save()
         return topic
 

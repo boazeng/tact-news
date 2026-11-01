@@ -25,6 +25,8 @@ export const orderTopics = (ids) => request('/api/topics-order', json('PUT', { i
 export const deleteTopic = (id) => request(`/api/topics/${encodeURIComponent(id)}`, { method: 'DELETE' })
 export const getIssues = (topic) => request(`/api/issues?${q(topic)}`)
 export const getIssue = (topic, day) => request(`/api/issues/${day}?${q(topic)}`)
+export const getAgent = () => request('/api/agent')
+export const runAgent = (topic = '') => request(`/api/agent/run?${q(topic)}`, { method: 'POST' })
 export const getMe = () => request('/auth/me').catch(() => ({}))
 export const paste = (topic, day, kind, text, title = '') =>
   request(`/api/issues/${day}/paste?${q(topic)}`, json('POST', { kind, text, title }))

@@ -7,9 +7,9 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from shared_auth import require_role
 
-from . import audio_intake
+from . import audio_intake, evening_agent
 from .media import maybe_transcode
-from .publish import publish, require_token, resolve_date
+from .publish import publish, require_token, resolve_date, token_ok
 from .storage import MEDIA_TYPES, RETENTION_DAYS, StorageError, has_content, safe_name, today
 from .topics import LEGACY_TOPIC, Topics
 
@@ -44,11 +44,12 @@ def build_router(topics: Topics) -> APIRouter:
         color: str = ""
         description: str = ""
         tabs: list[str] | None = None
+        sources: str = ""
 
     @router.post("/api/topics")
     def add_topic(body: NewTopic, _admin=admin):
         """תחום על חדש — מופיע מיד באתר, באפליקציה ובכלי של גרוק."""
-        guard(topics.add, body.id, body.name, body.color, body.description, body.tabs)
+        guard(topics.add, body.id, body.name, body.color, body.description, body.tabs, body.sources)
         return {"ok": True, "topics": topics.listing()}
 
     class TopicEdit(BaseModel):
@@ -56,10 +57,11 @@ def build_router(topics: Topics) -> APIRouter:
         color: str = ""
         description: str = ""
         tabs: list[str] | None = None
+        sources: str | None = None
 
     @router.patch("/api/topics/{tid}")
     def edit_topic(tid: str, body: TopicEdit, _admin=admin):
-        guard(topics.update, tid, body.name, body.color, body.description, body.tabs)
+        guard(topics.update, tid, body.name, body.color, body.description, body.tabs, body.sources)
         return {"ok": True, "topics": topics.listing()}
 
     class TopicOrder(BaseModel):
@@ -200,5 +202,23 @@ def build_router(topics: Topics) -> APIRouter:
             day = resolve_date(storage, date, None)
             return audio_intake.save_upload(storage, day, file.file, file.filename or "audio.mp3", title)
         return guard(save)
+
+    # ───────── עדכון ערב (סוכן Claude) ─────────
+    @router.get("/api/agent")
+    def agent_status(_admin=admin):
+        return evening_agent.status(topics)
+
+    @router.post("/api/agent/run")
+    def agent_run(request: Request, topic: str = ""):
+        """הפעלה ידנית: מנהל מדף הניהול, או עם טוקן הפרסום (גרוק / סקריפט)."""
+        if not token_ok(request.headers.get("authorization")):
+            require_role("admin")(request)
+        if topic:
+            store(topic)  # מאמת שהתחום קיים
+        if not evening_agent.status(topics)["enabled"]:
+            raise HTTPException(503, "אין ANTHROPIC_API_KEY בשרת")
+        if not evening_agent.start_in_background(topics, topic, "manual"):
+            raise HTTPException(409, "עדכון ערב כבר רץ")
+        return {"ok": True, "started": True, "topic": topic or "all"}
 
     return router

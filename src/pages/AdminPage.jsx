@@ -5,6 +5,7 @@ import UploadPanel from '../components/admin/UploadPanel.jsx'
 import DaysTable from '../components/admin/DaysTable.jsx'
 import GrokPrompt from '../components/admin/GrokPrompt.jsx'
 import TopicsManager from '../components/admin/TopicsManager.jsx'
+import AgentPanel from '../components/admin/AgentPanel.jsx'
 
 export default function AdminPage({ topics, navigate, onChanged, onTopicsChanged }) {
   const [me, setMe] = useState(null)
@@ -58,6 +59,7 @@ export default function AdminPage({ topics, navigate, onChanged, onTopicsChanged
       </div>
       <UploadPanel topic={topic} day={day} setDay={setDay} onChanged={refresh} navigate={navigate} />
       <DaysTable topic={topic} issues={issues} onChanged={refresh} navigate={navigate} onPick={setDay} />
+      <AgentPanel topics={topics} onChanged={refresh} />
       <TopicsManager topics={topics} onChanged={onTopicsChanged} />
       <GrokPrompt />
     </div>

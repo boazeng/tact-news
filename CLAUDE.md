@@ -26,7 +26,10 @@
 - `backend/` — FastAPI. `storage.py` (תיקייה לכל יום, retention, קישורי פודקאסט), `api.py` (נתיבים + `POST /api/publish`), `publish.py` (טוקן + לוגיקת פרסום משותפת), `mcp_server.py` (`/mcp`: list_topics · publish_newsletter · add_podcast_links · add_youtube_links · add_guide_links · add_papers · upload_audio_from_url · upload_audio_base64 · get_status), `topics.py` (תחומי על + הגירה), `audio_intake.py` (אודיו מגרוק: URL / base64 בחתיכות / `POST /api/publish/audio`; חוסם כתובות פנימיות), `media.py` (WAV→M4A), `server.py` (auth + SPA)
 - `src/` — React/Vite RTL. `pages/DayPage` (הגיליון), `pages/AdminPage` (העלאה), `components/Player` (נגן גלובלי — זוכר מיקום ומהירות, Media Session)
 - `docs/GROK-PROMPT.md` — ההוראה לגרוק לפרסם לבד. **מקור יחיד** — דף הניהול מייבא אותו (`?raw`)
-- `docs/CLAUDE-AUTOMATION.md` — **תכנון (טרם בוצע)**: Claude במקום גרוק — Routine בענן לטקסט, Cowork על ה-Mac mini ל-NotebookLM. הפודקאסטים נשארים ב-NotebookLM
+- `backend/evening_agent.py` — **עדכון ערב של Claude** (חי מ-2026-11-01): כל יום ב-`EVENING_TIME` (19:00 ישראל) לכל תחום עם לשונית ניוזלטר — Messages API + web_search/web_fetch, מקורות מ-`sources` של התחום, מחזיר רק ידיעות חדשות דרך הכלי `submit_evening_update`. **הקוד ממזג** לראש הקטגוריות עם "🆕 עדכון ערב: " (כפילויות לפי URL נזרקות) ומפרסם מחדש — הבוקר, "מעקב פייסבוק" וקישורי הפודקאסט נשמרים. מפתח: `ANTHROPIC_API_KEY` ב-`.env` של השרת; מודל `AGENT_MODEL` (ברירת מחדל `claude-opus-5-5`). יומן: `database/agent_runs.json`; בדף הניהול — "עדכון ערב" + "הרץ עכשיו" (`GET /api/agent`, `POST /api/agent/run?topic=` — מנהל או טוקן הפרסום).
+  ⚠️ גרוק **לא** מפרסם מחדש את הניוזלטר אחרי 18:30 — `publish_newsletter` מחליף הכול ומוחק את עדכון הערב (כתוב ב-`GROK-PROMPT.md`).
+- `sources` בכל תחום — מקורות החדשות (שורה לכל מקור), נערך בדף הניהול, חוזר ב-`list_topics` לגרוק ומשמש את סוכן הערב.
+- `docs/CLAUDE-AUTOMATION.md` — התכנון הרחב (Claude במקום גרוק). בוצע: עדכון הערב בלבד. הבוקר + NotebookLM + פייסבוק — עדיין גרוק
 - `samples/2026-10-23.json` — גיליון אמיתי בפורמט, לבדיקות
 
 ## נתונים

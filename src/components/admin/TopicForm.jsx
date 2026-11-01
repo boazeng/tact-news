@@ -7,7 +7,7 @@ export const SWATCHES = ['#6d28d9', '#0b72b9', '#15803d', '#c62828', '#a8500a', 
 // טופס תחום — להוספה (עם מזהה) ולעריכה (המזהה קבוע). התיאור תומך בהדגשה ובסימון.
 export default function TopicForm({ initial, isNew, onSubmit, onCancel, submitLabel }) {
   const [form, setForm] = useState(() => ({
-    id: '', name: '', color: SWATCHES[2], description: '', tabs: TABS.map((t) => t.id), ...initial,
+    id: '', name: '', color: SWATCHES[2], description: '', sources: '', tabs: TABS.map((t) => t.id), ...initial,
   }))
   const toggleTab = (id) => setForm({
     ...form,
@@ -31,7 +31,7 @@ export default function TopicForm({ initial, isNew, onSubmit, onCancel, submitLa
     setMsg('')
     try {
       await onSubmit(form)
-      if (isNew) setForm({ id: '', name: '', color: SWATCHES[2], description: '', tabs: TABS.map((t) => t.id) })
+      if (isNew) setForm({ id: '', name: '', color: SWATCHES[2], description: '', sources: '', tabs: TABS.map((t) => t.id) })
     } catch (err) {
       setMsg(err.message)
     } finally {
@@ -78,6 +78,12 @@ export default function TopicForm({ initial, isNew, onSubmit, onCancel, submitLa
           <p className="rich-preview">{renderMarks(form.description)}</p>
         )}
       </div>
+
+      <label className="topic-desc-field">
+        <span>מקורות החדשות (שורה לכל מקור) — גרוק וסוכן הערב של Claude מעדיפים אותם</span>
+        <textarea value={form.sources} onChange={set('sources')} rows={4} maxLength={2000} dir="auto"
+          placeholder={'Reuters\nTechCrunch\nגלובס'} />
+      </label>
 
       <fieldset className="tab-checks">
         <legend>מה גרוק ממלא בתחום הזה</legend>

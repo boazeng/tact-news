@@ -1,11 +1,11 @@
-"""עדכון ערב — מוסיף לגיליון של היום ידיעות שפורסמו מאז הבוקר.
+"""עדכוני Claude — מוסיפים לגיליון של היום ידיעות שפורסמו מאז הריצה הקודמת.
 
-גרוק מפרסם את גיליון הבוקר. בשעה EVENING_TIME (ברירת מחדל 19:00, שעון ישראל), לכל תחום שיש בו לשונית ניוזלטר:
-1. הקוד אוסף מהפידים של המקורות (שדה sources: "שם | כתובת-פיד") את מה שפורסם ב-WINDOW_HOURS האחרונות — בחינם.
+גרוק מפרסם את גיליון הבוקר. בכל שעה ב-RUN_TIMES (ברירת מחדל 07:00 ו-19:00, שעון ישראל), לכל תחום שיש בו ניוזלטר:
+1. הקוד אוסף מהפידים של המקורות (שדה sources: "שם | כתובת-פיד") את מה שפורסם מאז הריצה הקודמת — בחינם.
 2. Claude בוחר מהרשימה את החשוב ומשייך לקטגוריות (editor.select).
 3. הקוד מתרגם קישורי Google News לכתובת הכתבה ומוריד את הטקסט שלה.
 4. Claude כותב כותרת, תקציר והרחבה בעברית מתוך הטקסט (editor.write).
-5. הקוד ממזג לראש הקטגוריות עם הקידומת "🆕 עדכון ערב: " ומפרסם מחדש — שום דבר מהבוקר לא נמחק.
+5. הקוד ממזג לראש הקטגוריות עם "🆕 עדכון בוקר: " / "🆕 עדכון ערב: " ומפרסם מחדש — שום דבר מהבוקר לא נמחק.
 
 בלי חיפוש ברשת — הקישורים והתאריכים מגיעים מהפידים, וזה גם מה שמחזיק את העלות נמוכה.
 מפתח: ANTHROPIC_API_KEY ב-.env של האתר. יומן ריצות: database/agent_runs.json.
@@ -27,9 +27,9 @@ logger = logging.getLogger("tact-news")
 
 IL = ZoneInfo("Asia/Jerusalem")
 MODEL = editor.MODEL
-EVENING_TIME = os.getenv("EVENING_TIME", "19:00")
-WINDOW_HOURS = int(os.getenv("EVENING_WINDOW_HOURS", "20"))   # 19:00 → מ-23:00 אתמול
-PREFIX = "🆕 עדכון ערב: "
+RUN_TIMES = [t.strip() for t in os.getenv("RUN_TIMES", "07:00,19:00").split(",") if t.strip()]
+MARGIN = timedelta(minutes=30)      # חפיפה קטנה עם החלון הקודם — כפילויות נזרקות ממילא
+PREFIXES = ("🆕 עדכון בוקר: ", "🆕 עדכון ערב: ")
 MAX_CANDIDATES = 160    # כותרות שנשלחות לבחירה, לתחום
 MAX_ITEMS = 18          # ידיעות לתחום, לריצה
 KEEP_RUNS = 60
@@ -63,7 +63,7 @@ def status(topics: Topics) -> dict:
     return {
         "enabled": bool(os.getenv("ANTHROPIC_API_KEY")),
         "model": MODEL,
-        "evening_time": EVENING_TIME,
+        "run_times": RUN_TIMES,
         "running": _run_lock.locked(),
         "runs": load_runs(topics)[:20],
     }
@@ -84,8 +84,11 @@ def run_evening(topics: Topics, only: str = "", trigger: str = "schedule") -> di
         return {}
     try:
         now = datetime.now(IL)
+        prefix = PREFIXES[0] if now.hour < 14 else PREFIXES[1]
+        since = _previous_slot(now) - MARGIN
         run = {"id": now.strftime("%Y%m%d-%H%M%S"), "started": now.isoformat(timespec="seconds"),
-               "trigger": trigger, "model": MODEL, "date": today().isoformat(), "topics": []}
+               "trigger": trigger, "model": MODEL, "date": today().isoformat(),
+               "since": since.isoformat(timespec="minutes"), "topics": []}
         _save_run(topics, run)
         for t in topics.listing():
             if only and t["id"] != only:
@@ -93,7 +96,7 @@ def run_evening(topics: Topics, only: str = "", trigger: str = "schedule") -> di
             if "newsletter" not in t["tabs"]:
                 continue
             try:
-                result = _run_topic(topics, t)
+                result = _run_topic(topics, t, since, prefix)
             except Exception as e:  # noqa: BLE001 — תחום אחד לא עוצר את השאר
                 logger.exception("עדכון ערב נכשל בתחום %s", t["id"])
                 result = {"topic": t["id"], "error": str(e)[:300]}
@@ -108,7 +111,7 @@ def run_evening(topics: Topics, only: str = "", trigger: str = "schedule") -> di
         _run_lock.release()
 
 
-def _run_topic(topics: Topics, topic: dict) -> dict:
+def _run_topic(topics: Topics, topic: dict, since: datetime, prefix: str) -> dict:
     storage = topics.get(topic["id"])
     day = today().isoformat()
     newsletter = storage.day_info(day)["newsletter"]
@@ -120,11 +123,10 @@ def _run_topic(topics: Topics, topic: dict) -> dict:
         return {"topic": topic["id"], "skipped": "אין פידים ברשימת המקורות"}
 
     # 1. איסוף — בלי מודל
-    since = datetime.now(IL) - timedelta(hours=WINDOW_HOURS)
     found, stats = feeds.collect(sources, since)
     sections = data.get("sections") or []
     morning = [i for s in sections for i in s.get("items", [])]
-    known_titles = {feeds.norm_title(i.get("title", "").removeprefix(PREFIX)) for i in morning}
+    known_titles = {feeds.norm_title(_strip_prefix(i.get("title", ""))) for i in morning}
     known_urls = {_norm_url(i.get("source_url", "")) for i in morning}
     candidates = [c for c in found if feeds.norm_title(c["title"]) not in known_titles
                   and _norm_url(c["url"]) not in known_urls][:MAX_CANDIDATES]
@@ -164,7 +166,7 @@ def _run_topic(topics: Topics, topic: dict) -> dict:
                           "details": w.get("details", ""), "source_url": c["url"], "source_name": c["source"]})
 
     # 5. מיזוג ופרסום
-    added = _merge(data, items)
+    added = _merge(data, items, prefix)
     if added:
         storage.publish_text(day, json.dumps(data, ensure_ascii=False))
     return result | {"picked": len(chosen), "added": added, "note": note,
@@ -177,7 +179,13 @@ def _norm_url(url: str) -> str:
         .removeprefix("www.")
 
 
-def _merge(data: dict, items: list[dict]) -> int:
+def _strip_prefix(title: str) -> str:
+    for p in PREFIXES:
+        title = title.removeprefix(p)
+    return title
+
+
+def _merge(data: dict, items: list[dict], prefix: str = PREFIXES[1]) -> int:
     """ידיעות חדשות → לראש הקטגוריה שלהן (או קטגוריה חדשה בסוף). כפילויות לפי כתובת נזרקות."""
     sections = data.setdefault("sections", [])
     seen = {_norm_url(i.get("source_url", "")) for s in sections for i in s.get("items", [])}
@@ -189,8 +197,8 @@ def _merge(data: dict, items: list[dict]) -> int:
             continue
         seen.add(key)
         title = it["title"].strip()
-        title = title if title.startswith("🆕") else PREFIX + title
-        fresh.setdefault(it["section"].strip() or "עדכון ערב", []).append({
+        title = title if title.startswith("🆕") else prefix + title
+        fresh.setdefault(it["section"].strip() or "עדכונים", []).append({
             "title": title, "summary": it["summary"].strip(), "details": it["details"].strip(),
             "source_url": it["source_url"].strip(), "source_name": it["source_name"].strip(),
         })
@@ -203,10 +211,23 @@ def _merge(data: dict, items: list[dict]) -> int:
 
 
 # ───────────────────────── תזמון ─────────────────────────
-def seconds_until_evening() -> float:
-    hh, mm = (int(x) for x in EVENING_TIME.split(":"))
+def _slots(now: datetime) -> list[datetime]:
+    """שעות הריצה של אתמול, היום ומחר — ממוינות."""
+    out = []
+    for days in (-1, 0, 1):
+        d = now.date() + timedelta(days=days)
+        for t in RUN_TIMES:
+            hh, mm = (int(x) for x in t.split(":"))
+            out.append(datetime(d.year, d.month, d.day, hh, mm, tzinfo=IL))
+    return sorted(out)
+
+
+def _previous_slot(now: datetime) -> datetime:
+    """תחילת החלון: שעת הריצה המתוזמנת שלפני הריצה הזו (ריצה ב-19:00 → מ-07:00)."""
+    past = [s for s in _slots(now) if s <= now - timedelta(minutes=5)]
+    return past[-1] if past else now - timedelta(hours=12)
+
+
+def seconds_until_next_run() -> float:
     now = datetime.now(IL)
-    target = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
-    if target <= now:
-        target = datetime.combine(target.date() + timedelta(days=1), target.timetz())
-    return (target - now).total_seconds()
+    return (next(s for s in _slots(now) if s > now) - now).total_seconds()

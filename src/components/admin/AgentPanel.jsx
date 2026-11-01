@@ -37,9 +37,9 @@ export default function AgentPanel({ topics, onChanged }) {
   if (!info) return null
   return (
     <section className="card">
-      <h2 className="card-title">עדכון ערב (Claude)</h2>
+      <h2 className="card-title">עדכוני Claude (בוקר וערב)</h2>
       <p className="kind-hint">
-        כל יום ב-{info.evening_time} נאספות מהפידים של המקורות (שדה המקורות בכל תחום) הידיעות שפורסמו מאז הבוקר;
+        כל יום ב-{info.run_times.join(" וב-")} נאספות מהפידים של המקורות (שדה המקורות בכל תחום) הידיעות שפורסמו מאז העדכון הקודם;
         Claude בוחר את החשובות, כותב אותן בעברית ומוסיף אותן לראש הקטגוריות עם הסימון 🆕. שום דבר מהבוקר לא נמחק. מודל: {info.model}.
         {!info.enabled && <strong> כבוי — אין ANTHROPIC_API_KEY בשרת.</strong>}
       </p>

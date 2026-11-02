@@ -177,7 +177,7 @@ def build_router(topics: Topics) -> APIRouter:
 
     # ───────── פרסום אוטומטי (טוקן) ─────────
     class Publish(BaseModel):
-        content: str | dict
+        content: str | dict = ""
         date: str = ""
         topic: str = ""
         podcasts: list | None = None

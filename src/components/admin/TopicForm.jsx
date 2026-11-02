@@ -62,7 +62,7 @@ export default function TopicForm({ initial, isNew, onSubmit, onCancel, submitLa
 
       <div className="topic-desc-field">
         <div className="rich-head">
-          <span>מה לכסות (ההוראה לגרוק)</span>
+          <span>מה לכסות (ההוראה ל-Claude ולגרוק)</span>
           <span className="rich-tools">
             <button type="button" className="rich-btn" onClick={() => wrap('**')} title="הדגשה — חשוב">
               <strong>B</strong> הדגשה
@@ -80,7 +80,7 @@ export default function TopicForm({ initial, isNew, onSubmit, onCancel, submitLa
       </div>
 
       <label className="topic-desc-field">
-        <span>מקורות החדשות — שורה לכל מקור: <code dir="ltr">שם | כתובת-פיד</code>. עדכון הערב אוסף רק ממקורות עם פיד</span>
+        <span>מקורות החדשות — שורה לכל מקור: <code dir="ltr">שם | כתובת-פיד</code>. Claude אוסף רק ממקורות עם פיד</span>
         <textarea value={form.sources} onChange={set('sources')} rows={6} maxLength={6000} dir="ltr"
           placeholder={'Reuters\nTechCrunch\nגלובס'} />
       </label>

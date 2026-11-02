@@ -13,52 +13,35 @@ from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
 from . import audio_intake
-from .publish import add_list, publish, resolve_date, status, token_ok
+from .publish import (FACEBOOK, add_list, newsletter, publish, resolve_date, set_section, status, token_ok,
+                      topic_title)
 from .storage import StorageError
 from .topics import Topics
 
 INSTRUCTIONS = (
     "This is the TACT News site (tact-news.newavera.co.il) — Boaz's daily Hebrew news digest. "
     "Content is organised by topic. The topic list changes — call list_topics every time: each topic has a "
-    "description of what to cover, and you publish a full day for EVERY topic. Each day has tabs: "
+    "description of what to cover and tabs = which parts to fill. Each day has tabs: "
     "newsletter, podcasts (voice brief + episodes + podcast links), youtube (video links), "
     "guides (YouTube how-to / tutorial videos — a separate tab), papers (recent academic papers). "
-    "Publish the newsletter with publish_newsletter (one call, full JSON — it may already include 'podcasts' and "
-    "'youtube'), upload audio with upload_audio_*, and check with get_status. All text in Hebrew. "
+    "THE NEWSLETTER IS BUILT BY CLAUDE (05:30 and 19:00 Israel time) — you do not publish it. Your part: "
+    "the Facebook section (set_facebook_section), podcasts + NotebookLM audio (read the day's newsletter with "
+    "get_newsletter as the material), YouTube, guides and papers. Check with get_status. All text in Hebrew. "
     "Days are deleted automatically after 14 days."
 )
 
-NEWSLETTER_FORMAT = """\
-newsletter_json — JSON object (as a string):
-{
-  "date": "YYYY-MM-DD",
-  "title": "חדשות לבועז — טכנולוגיה ו-AI",
-  "sections": [ { "name": "בינה מלאכותית",
-                  "items": [ { "title": "...", "summary": "2–4 sentences",
-                               "details": "full expansion, paragraphs separated by \\n",
-                               "source_url": "https://...", "source_name": "CNBC" } ] } ],
-  "podcasts": [ { "title": "episode title", "show": "podcast name",
-                  "url": "https://... (direct .mp3 preferred, else Spotify/Apple episode page)",
-                  "duration_minutes": 25, "description": "one line in Hebrew: why this episode today" } ],
-  "youtube": [ { "title": "video title", "channel": "channel name",
-                 "url": "https://www.youtube.com/watch?v=...", "duration_minutes": 12,
-                 "description": "one line in Hebrew: why this video" } ],
-  "guides": [ { same fields as youtube — tutorials / how-to videos, YouTube links only } ],
-  "papers": [ { "title": "original paper title", "authors": "First Author, Second Author et al.",
-                "venue": "arXiv / Nature / NeurIPS 2026 ...", "published": "YYYY-MM-DD",
-                "url": "https://arxiv.org/abs/... (the paper's page)", "pdf_url": "optional",
-                "summary": "2–4 sentences in Hebrew: what they found",
-                "details": "optional, Hebrew: method, results, limitations, why it matters" } ],
-  "closing": "optional closing line"
-}
-"podcasts" → Podcasts tab, "youtube" → YouTube tab, "guides" → Guides (מדריכים) tab, "papers" → Papers (מאמרים) tab. All optional.
-Publishing again for the same date+topic replaces that day's newsletter."""
+FACEBOOK_FORMAT = """\
+items_json — JSON array (as a string) of Facebook posts worth reporting:
+[ { "title": "...", "summary": "2–4 sentences", "details": "full expansion, paragraphs separated by \\n",
+    "source_url": "https://www.facebook.com/... (the post)", "source_name": "page / person name" } ]
+Replaces only the "מעקב פייסבוק" section of that day; the rest of the newsletter is untouched.
+An empty array removes the section."""
 
 TOPIC_ARG = "topic = topic id from list_topics (empty = the default topic)."
 
 
 def build_mcp(topics: Topics) -> MCPServer:
-    server = MCPServer(name="tact-news", instructions=INSTRUCTIONS, version="2.0.0")
+    server = MCPServer(name="tact-news", instructions=INSTRUCTIONS, version="3.0.0")
 
     def call(ctx: Context, fn) -> dict[str, Any]:
         headers = ctx.headers or {}
@@ -78,10 +61,37 @@ def build_mcp(topics: Topics) -> MCPServer:
     def list_topics(ctx: Context) -> dict[str, Any]:
         return call(ctx, lambda: {"topics": topics.listing()})
 
-    @server.tool(description="Publish a day's newsletter (creates or replaces it). " + TOPIC_ARG + "\n" + NEWSLETTER_FORMAT)
-    def publish_newsletter(ctx: Context, newsletter_json: str, date: str = "",
+    def topic_name(storage) -> str:
+        return next((t["name"] for t in topics.listing() if t["id"] == storage.topic), storage.topic)
+
+    @server.tool(description=(
+        "NOT AVAILABLE ANY MORE — the newsletter is built by Claude. Calling it returns an error. "
+        "Use set_facebook_section for Facebook, and add_podcast_links / add_youtube_links / add_guide_links / "
+        "add_papers for the other tabs."))
+    def publish_newsletter(ctx: Context, newsletter_json: str = "", date: str = "",
                            topic: str = "") -> dict[str, Any]:
-        return call(ctx, lambda: publish(topics.get(topic), newsletter_json, date))
+        return call(ctx, lambda: publish(topics.get(topic), newsletter_json or "x", date))
+
+    @server.tool(description=(
+        "Set the Facebook section (מעקב פייסבוק) of a day's newsletter — only this section; Claude's news "
+        "items stay as they are. Call it any time; calling again replaces the section. date defaults to today. "
+        + TOPIC_ARG + "\n" + FACEBOOK_FORMAT))
+    def set_facebook_section(ctx: Context, items_json: str, date: str = "",
+                             topic: str = "") -> dict[str, Any]:
+        def run():
+            storage = topics.get(topic)
+            return set_section(storage, topic_title(topic_name(storage)), FACEBOOK, items_json, date)
+        return call(ctx, run)
+
+    @server.tool(description=(
+        "The full newsletter of a day (default today) in a topic — sections with title, summary, details and "
+        "source of every item. Use it as the material for NotebookLM (voice brief + episodes). Claude publishes "
+        "it at 05:30 Israel time and adds an evening update at 19:00. " + TOPIC_ARG))
+    def get_newsletter(ctx: Context, date: str = "", topic: str = "") -> dict[str, Any]:
+        def run():
+            storage = topics.get(topic)
+            return newsletter(storage, resolve_date(storage, date, None))
+        return call(ctx, run)
 
     @server.tool(description=(
         "Set the podcast LINKS for a day (Podcasts tab; replaces the existing list). podcasts_json = JSON array of "

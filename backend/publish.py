@@ -1,16 +1,22 @@
 """פרסום אוטומטי — הלוגיקה המשותפת ל-MCP (גרוק) ול-REST (/api/publish).
 
 אימות: טוקן אחד, TACT_NEWS_PUBLISH_TOKEN, ב-Authorization: Bearer. אין לו גישה למחיקה או לניהול.
+מ-2026-11-02 את הניוזלטר בונה Claude (evening_agent.py). גרוק לא מפרסם ניוזלטר — רק ממלא את "מעקב פייסבוק"
+(set_section) וקורא את הגיליון בשביל NotebookLM (newsletter).
 """
 import hmac
 import json
 import os
+import threading
 
 from fastapi import HTTPException
 
 from .storage import Storage, StorageError, strip_code_fences, today
 
 SITE = "https://tact-news.newavera.co.il"
+FACEBOOK = "מעקב פייסבוק"
+# כל כתיבה לגיליון קיים (Claude ממזג, גרוק מחליף את פייסבוק) — קוראים מחדש וכותבים בתוך המנעול
+NEWSLETTER_LOCK = threading.Lock()
 
 
 def token_ok(header: str | None) -> bool:
@@ -37,26 +43,16 @@ def page_url(storage: Storage, day: str, tab: str = "") -> str:
 
 def publish(storage: Storage, content, date: str = "", podcasts: list | None = None,
             youtube: list | None = None, guides: list | None = None, papers: list | None = None) -> dict:
-    """content = ה-JSON של הניוזלטר (מחרוזת או אובייקט). podcasts/youtube/guides = רשימות קישורים (לא חובה)."""
-    if isinstance(content, dict):
-        text, data = json.dumps(content, ensure_ascii=False), content
-    else:
-        text = strip_code_fences(str(content or ""))
-        try:
-            data = json.loads(text) if text.startswith("{") else None
-        except ValueError:
-            data = None  # publish_text יחזיר את שגיאת ה-JSON המדויקת
-    day = resolve_date(storage, date, data)
-    kind = storage.publish_text(day, text)
-    if podcasts:
-        storage.save_list(day, "links", podcasts)
-    if youtube:
-        storage.save_list(day, "youtube", youtube)
-    if guides:
-        storage.save_list(day, "guides", guides)
-    if papers:
-        storage.save_list(day, "papers", papers)
-    return status(storage, day) | {"ok": True, "kind": kind}
+    """REST /api/publish. ניוזלטר (content) כבר לא מתקבל — Claude בונה אותו. הרשימות כן."""
+    if content:
+        raise StorageError("את הניוזלטר בונה עכשיו Claude, ואי אפשר להחליף אותו. לפייסבוק: set_facebook_section. "
+                           "לפודקאסטים, YouTube, מדריכים ומאמרים: add_podcast_links / add_youtube_links / "
+                           "add_guide_links / add_papers")
+    day = resolve_date(storage, date, None)
+    for which, items in (("links", podcasts), ("youtube", youtube), ("guides", guides), ("papers", papers)):
+        if items:
+            storage.save_list(day, which, items)
+    return status(storage, day) | {"ok": True}
 
 
 def _as_list(value, what: str) -> list:
@@ -94,3 +90,53 @@ def status(storage: Storage, day: str) -> dict:
         "papers": [p["title"] for p in info["papers"]],
         "url": page_url(storage, day),
     }
+
+
+def topic_title(name: str) -> str:
+    return f"חדשות לבועז — {name}"
+
+
+def edit_newsletter(storage: Storage, day: str, title: str, fn) -> dict:
+    """קורא את הגיליון של היום (או מתחיל ריק), fn(data) משנה אותו, ושומר — הכול בתוך המנעול."""
+    with NEWSLETTER_LOCK:
+        nl = storage.day_info(day)["newsletter"]
+        if nl and nl["kind"] != "json":
+            raise StorageError(f"הגיליון של {day} הוא {nl['kind']} — אין עריכה")
+        data = (nl or {}).get("data") or {"date": day, "title": title, "sections": []}
+        if fn(data):
+            # פייסבוק תמיד בסוף
+            data["sections"] = sorted(data["sections"], key=lambda s: s.get("name") == FACEBOOK)
+            storage.publish_text(day, json.dumps(data, ensure_ascii=False))
+        return data
+
+
+def set_section(storage: Storage, title: str, name: str, items, date: str = "") -> dict:
+    """מחליף קטגוריה אחת בגיליון (פייסבוק של גרוק) — בלי לגעת בשאר. רשימה ריקה = מוחק את הקטגוריה."""
+    if isinstance(items, str):
+        try:
+            items = json.loads(strip_code_fences(items) or "[]")
+        except ValueError as e:
+            raise StorageError(f"הידיעות אינן JSON תקין: {e}") from e
+    if not isinstance(items, list):
+        raise StorageError("צריך רשימה של ידיעות")
+    clean = []
+    for x in items:
+        if not isinstance(x, dict) or not str(x.get("title", "")).strip():
+            raise StorageError('כל ידיעה צריכה "title"')
+        clean.append({k: str(x.get(k, "")).strip() for k in ("title", "summary", "details", "source_url", "source_name")})
+    day = resolve_date(storage, date, None)
+
+    def apply(data):
+        data["sections"] = [s for s in data.get("sections", []) if s.get("name") != name]
+        if clean:
+            data["sections"].append({"name": name, "items": clean})
+        return True
+    edit_newsletter(storage, day, title, apply)
+    return status(storage, day) | {"ok": True, "saved": len(clean)}
+
+
+def newsletter(storage: Storage, day: str) -> dict:
+    """הגיליון המלא (בשביל NotebookLM)."""
+    nl = storage.day_info(day)["newsletter"]
+    return {"topic": storage.topic, "date": day, "published": bool(nl),
+            "newsletter": (nl or {}).get("data"), "url": page_url(storage, day)}

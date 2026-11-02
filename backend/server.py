@@ -58,17 +58,17 @@ async def _retention_loop():
 
 
 async def _evening_loop():
-    """עדכוני Claude — כל יום ב-RUN_TIMES (07:00 ו-19:00, שעון ישראל). בלי ANTHROPIC_API_KEY — כבוי."""
+    """הניוזלטר של Claude — כל יום ב-RUN_TIMES (05:30 גיליון בוקר, 19:00 עדכון ערב). בלי ANTHROPIC_API_KEY — כבוי."""
     while True:
         await asyncio.sleep(evening_agent.seconds_until_next_run())
         if not os.getenv("ANTHROPIC_API_KEY"):
-            logger.warning("עדכון ערב: אין ANTHROPIC_API_KEY — מדלגים")
+            logger.warning("ניוזלטר: אין ANTHROPIC_API_KEY — מדלגים")
             await asyncio.sleep(60)
             continue
         try:
             await asyncio.to_thread(evening_agent.run_evening, topics, "", "schedule")
         except Exception:  # noqa: BLE001
-            logger.exception("עדכון ערב נכשל")
+            logger.exception("ריצת הניוזלטר נכשלה")
         await asyncio.sleep(60)   # לא לרוץ פעמיים באותה דקה
 
 

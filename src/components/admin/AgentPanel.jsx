@@ -4,7 +4,7 @@ import { getAgent, runAgent } from '../../lib/api.js'
 const fmtTime = (iso) => (iso ? iso.slice(11, 16) : '')
 const fmtDay = (iso) => (iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}` : '')
 
-// עדכון ערב — סוכן Claude שמוסיף לגיליון של היום ידיעות מאז הבוקר (backend/evening_agent.py)
+// הניוזלטר של Claude — גיליון הבוקר ועדכון הערב (backend/evening_agent.py)
 export default function AgentPanel({ topics, onChanged }) {
   const [info, setInfo] = useState(null)
   const [topic, setTopic] = useState('')
@@ -27,7 +27,7 @@ export default function AgentPanel({ topics, onChanged }) {
     setMsg('')
     try {
       await runAgent(topic)
-      setMsg('העדכון התחיל — לוקח כמה דקות לכל תחום')
+      setMsg('הריצה התחילה — לוקח כמה דקות לכל תחום. לפני 14:00 = גיליון בוקר מלא, אחרי = עדכון ערב')
       load()
     } catch (e) {
       setMsg(e.message)
@@ -37,10 +37,10 @@ export default function AgentPanel({ topics, onChanged }) {
   if (!info) return null
   return (
     <section className="card">
-      <h2 className="card-title">עדכוני Claude (בוקר וערב)</h2>
+      <h2 className="card-title">הניוזלטר של Claude</h2>
       <p className="kind-hint">
-        כל יום ב-{info.run_times.join(" וב-")} נאספות מהפידים של המקורות (שדה המקורות בכל תחום) הידיעות שפורסמו מאז העדכון הקודם;
-        Claude בוחר את החשובות, כותב אותן בעברית ומוסיף אותן לראש הקטגוריות עם הסימון 🆕. שום דבר מהבוקר לא נמחק. מודל: {info.model}.
+        כל יום ב-{info.run_times.join(' וב-')} נאספות מהפידים של המקורות (שדה המקורות בכל תחום) הידיעות האחרונות, ו-Claude בוחר את החשובות וכותב אותן בעברית.
+        בבוקר הוא בונה את הגיליון המלא, ובערב מוסיף לראש הקטגוריות עם הסימון 🆕. את "מעקב פייסבוק" מוסיף גרוק. מודל: {info.model}.
         {!info.enabled && <strong> כבוי — אין ANTHROPIC_API_KEY בשרת.</strong>}
       </p>
 
@@ -66,7 +66,7 @@ export default function AgentPanel({ topics, onChanged }) {
             {info.runs.map((r) => (
               <tr key={r.id}>
                 <td>{fmtDay(r.started)} <span dir="ltr">{fmtTime(r.started)}</span>{!r.finished && ' · רץ'}</td>
-                <td>{r.trigger === 'schedule' ? 'מתוזמן' : 'ידני'}</td>
+                <td>{r.trigger === 'schedule' ? 'מתוזמן' : 'ידני'}{r.kind === 'base' ? ' · בוקר' : r.kind === 'update' ? ' · ערב' : ''}</td>
                 <td>
                   {r.topics.map((t) => (
                     <div key={t.topic} title={t.error || t.skipped || t.note || ''}>

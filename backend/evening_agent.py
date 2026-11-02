@@ -1,11 +1,14 @@
-"""עדכוני Claude — מוסיפים לגיליון של היום ידיעות שפורסמו מאז הריצה הקודמת.
+"""הניוזלטר — Claude בונה אותו לבד (מ-2026-11-02). גרוק ממלא רק את "מעקב פייסבוק" (publish.set_section).
 
-גרוק מפרסם את גיליון הבוקר. בכל שעה ב-RUN_TIMES (ברירת מחדל 07:00 ו-19:00, שעון ישראל), לכל תחום שיש בו ניוזלטר:
-1. הקוד אוסף מהפידים של המקורות (שדה sources: "שם | כתובת-פיד") את מה שפורסם מאז הריצה הקודמת — בחינם.
-2. Claude בוחר מהרשימה את החשוב ומשייך לקטגוריות (editor.select).
+בכל שעה ב-RUN_TIMES (ברירת מחדל 05:30 ו-19:00, שעון ישראל), לכל תחום עם לשונית ניוזלטר:
+- **ריצת הבוקר (לפני 14:00) = גיליון הבסיס:** ידיעות מ-24 השעות האחרונות, 25–45 לתחום, בלי סימון, + שורת סיום.
+- **ריצת הערב = עדכון:** מה שפורסם מאז ריצת הבוקר, לראש הקטגוריות עם "🆕 עדכון ערב: ".
+שלבים:
+1. הקוד אוסף מהפידים של המקורות (שדה sources: "שם | כתובת-פיד") — בחינם.
+2. Claude בוחר מהרשימה את החשוב ומשייך לקטגוריות (editor.select). מה שכבר פורסם אתמול והיום — לא נבחר.
 3. הקוד מתרגם קישורי Google News לכתובת הכתבה ומוריד את הטקסט שלה.
 4. Claude כותב כותרת, תקציר והרחבה בעברית מתוך הטקסט (editor.write).
-5. הקוד ממזג לראש הקטגוריות עם "🆕 עדכון בוקר: " / "🆕 עדכון ערב: " ומפרסם מחדש — שום דבר מהבוקר לא נמחק.
+5. הקוד ממזג לגיליון של היום בתוך NEWSLETTER_LOCK — קורא מחדש רגע לפני הכתיבה, כך שפייסבוק של גרוק לא נמחק.
 
 בלי חיפוש ברשת — הקישורים והתאריכים מגיעים מהפידים, וזה גם מה שמחזיק את העלות נמוכה.
 מפתח: ANTHROPIC_API_KEY ב-.env של האתר. יומן ריצות: database/agent_runs.json.
@@ -14,13 +17,13 @@ import json
 import logging
 import os
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import editor, feeds
+from .publish import FACEBOOK, edit_newsletter, topic_title
 from .storage import today
 from .topics import Topics
 
@@ -28,13 +31,12 @@ logger = logging.getLogger("tact-news")
 
 IL = ZoneInfo("Asia/Jerusalem")
 MODEL = editor.MODEL
-RUN_TIMES = [t.strip() for t in os.getenv("RUN_TIMES", "07:00,19:00").split(",") if t.strip()]
+RUN_TIMES = [t.strip() for t in os.getenv("RUN_TIMES", "05:30,19:00").split(",") if t.strip()]
 MARGIN = timedelta(minutes=30)      # חפיפה קטנה עם החלון הקודם — כפילויות נזרקות ממילא
-PREFIXES = ("🆕 עדכון בוקר: ", "🆕 עדכון ערב: ")
-MAX_CANDIDATES = 160    # כותרות שנשלחות לבחירה, לתחום
-MAX_ITEMS = 18          # ידיעות לתחום, לריצה
-WAIT_STEP = 15 * 60     # בבוקר: תחום שגרוק עוד לא פרסם לו גיליון — בודקים שוב כל 15 דקות
-WAIT_MAX = 2 * 3600     # ...עד שעתיים. אחרי זה מדלגים — לא יוצרים גיליון שגרוק ימחק כשיפרסם
+BASE_WINDOW = timedelta(hours=24)   # גיליון הבוקר
+EVENING = "🆕 עדכון ערב: "
+PREFIXES = ("🆕 עדכון בוקר: ", EVENING)   # "עדכון בוקר" — מגיליונות 1–2.11, נשאר לזיהוי בלבד
+LIMITS = {True: (260, 50), False: (160, 18)}   # base → (כותרות לבחירה, ידיעות לכתיבה)
 KEEP_RUNS = 60
 
 _run_lock = threading.Lock()
@@ -82,76 +84,64 @@ def start_in_background(topics: Topics, only: str = "", trigger: str = "manual")
 
 
 def run_evening(topics: Topics, only: str = "", trigger: str = "schedule") -> dict:
+    """ריצה אחת לכל התחומים (או רק only). לפני 14:00 = גיליון הבסיס, אחרי = עדכון ערב."""
     if not _run_lock.acquire(blocking=False):
-        logger.warning("עדכון ערב כבר רץ — מדלגים")
+        logger.warning("ריצת ניוזלטר כבר רצה — מדלגים")
         return {}
     try:
         now = datetime.now(IL)
-        prefix = PREFIXES[0] if now.hour < 14 else PREFIXES[1]
-        since = _previous_slot(now) - MARGIN
+        base = now.hour < 14
+        since = (now - BASE_WINDOW) if base else _previous_slot(now)
+        since -= MARGIN
         run = {"id": now.strftime("%Y%m%d-%H%M%S"), "started": now.isoformat(timespec="seconds"),
                "trigger": trigger, "model": MODEL, "date": today().isoformat(),
-               "since": since.isoformat(timespec="minutes"), "topics": []}
+               "kind": "base" if base else "update", "since": since.isoformat(timespec="minutes"), "topics": []}
         _save_run(topics, run)
-        pending = [t for t in topics.listing() if (not only or t["id"] == only) and "newsletter" in t["tabs"]]
-        deadline = time.monotonic() + WAIT_MAX
-        while pending:
-            waiting = []
-            for t in pending:
-                try:
-                    result = _run_topic(topics, t, since, prefix)
-                except Exception as e:  # noqa: BLE001 — תחום אחד לא עוצר את השאר
-                    logger.exception("עדכון נכשל בתחום %s", t["id"])
-                    result = {"topic": t["id"], "error": str(e)[:300]}
-                if result.get("waiting"):
-                    waiting.append(t)
-                    continue
-                run["topics"].append(result)
-                _save_run(topics, run)
-            if waiting and time.monotonic() + WAIT_STEP > deadline:
-                for t in waiting:
-                    run["topics"].append({"topic": t["id"], "skipped": "גרוק לא פרסם גיליון בוקר בזמן — לא נוסף עדכון"})
-                waiting = []
-            if waiting:
-                logger.info("עדכון בוקר: מחכים לגיליון של גרוק — %s", ", ".join(t["id"] for t in waiting))
-                time.sleep(WAIT_STEP)
-            pending = waiting
+        for t in topics.listing():
+            if (only and t["id"] != only) or "newsletter" not in t["tabs"]:
+                continue
+            try:
+                result = _run_topic(topics, t, since, base)
+            except Exception as e:  # noqa: BLE001 — תחום אחד לא עוצר את השאר
+                logger.exception("הניוזלטר נכשל בתחום %s", t["id"])
+                result = {"topic": t["id"], "error": str(e)[:300]}
+            run["topics"].append(result)
+            _save_run(topics, run)
         run["finished"] = datetime.now(IL).isoformat(timespec="seconds")
         run["cost_usd"] = round(sum(r.get("cost_usd", 0) for r in run["topics"]), 2)
         _save_run(topics, run)
-        logger.info("עדכון ערב הסתיים: %s", ", ".join(f'{r["topic"]}+{r.get("added", 0)}' for r in run["topics"]))
+        logger.info("ריצת ניוזלטר הסתיימה: %s", ", ".join(f'{r["topic"]}+{r.get("added", 0)}' for r in run["topics"]))
         return run
     finally:
         _run_lock.release()
 
 
-def _run_topic(topics: Topics, topic: dict, since: datetime, prefix: str) -> dict:
+def _items(data: dict | None, skip_facebook: bool = True) -> list[dict]:
+    return [i for s in (data or {}).get("sections", []) if not (skip_facebook and s.get("name") == FACEBOOK)
+            for i in s.get("items", [])]
+
+
+def _run_topic(topics: Topics, topic: dict, since: datetime, base: bool) -> dict:
     storage = topics.get(topic["id"])
     day = today().isoformat()
     newsletter = storage.day_info(day)["newsletter"]
-    if not newsletter and prefix == PREFIXES[0]:
-        # בוקר, יום חדש, גרוק עוד לא פרסם: גיליון שניצור עכשיו יימחק כשגרוק יפרסם — מחכים לו
-        return {"topic": topic["id"], "waiting": True}
     if newsletter and newsletter["kind"] != "json":
         return {"topic": topic["id"], "skipped": f"הגיליון של היום הוא {newsletter['kind']} — אין מיזוג"}
-    data = (newsletter or {}).get("data") or {"title": f"חדשות לבועז — {topic['name']}", "sections": []}
+    data = (newsletter or {}).get("data") or {}
     sources = feeds.parse_sources(topic.get("sources", ""))
     if not sources:
         return {"topic": topic["id"], "skipped": "אין פידים ברשימת המקורות"}
 
-    # 1. איסוף — בלי מודל
+    # 1. איסוף — בלי מודל. מה שכבר פורסם היום ואתמול (כולל עדכון הערב) לא חוזר
     found, stats = feeds.collect(sources, since)
-    sections = data.get("sections") or []
-    morning = [i for s in sections for i in s.get("items", [])]
-    # העדכון של אתמול בערב נמצא בגיליון של אתמול — גם הוא "כבר פורסם" (החלון של 07:00 מתחיל ב-18:30 אתמול)
     yesterday = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
     y_data = (storage.day_info(yesterday)["newsletter"] or {}).get("data") or {}
-    morning += [i for s in y_data.get("sections", []) for i in s.get("items", [])
-                if str(i.get("title", "")).startswith("🆕")]
-    known_titles = {feeds.norm_title(_strip_prefix(i.get("title", ""))) for i in morning}
-    known_urls = {_norm_url(i.get("source_url", "")) for i in morning}
+    published = _items(data) + _items(y_data)
+    known_titles = {feeds.norm_title(_strip_prefix(i.get("title", ""))) for i in published}
+    known_urls = {_norm_url(i.get("source_url", "")) for i in published}
+    max_candidates, max_items = LIMITS[base]
     candidates = [c for c in found if feeds.norm_title(c["title"]) not in known_titles
-                  and _norm_url(c["url"]) not in known_urls][:MAX_CANDIDATES]
+                  and _norm_url(c["url"]) not in known_urls][:max_candidates]
     result = {"topic": topic["id"], "model": MODEL, "feeds": len(sources),
               "feeds_failed": [n for n, v in stats.items() if isinstance(v, str)],
               "candidates": len(candidates), "added": 0}
@@ -159,12 +149,14 @@ def _run_topic(topics: Topics, topic: dict, since: datetime, prefix: str) -> dic
     if not candidates:
         return result | {"note": "אין ידיעות חדשות בפידים", "cost_usd": 0}
 
-    # 2. בחירה
-    now = datetime.now(IL).strftime("%H:%M")
-    picks, note = editor.select(topic, [i.get("title", "") for i in morning],
-                                [s.get("name", "") for s in sections], candidates, now, usage)
+    # 2. בחירה. הקטגוריות: של היום, ואם אין — של אתמול (אותם שמות כל יום)
+    sections = [s.get("name", "") for s in (data.get("sections") or y_data.get("sections") or [])
+                if s.get("name") != FACEBOOK]
+    now = datetime.now(IL).strftime("%d.%m %H:%M")
+    picks, note, closing = editor.select(topic, [_strip_prefix(i.get("title", "")) for i in published],
+                                         sections, candidates, now, usage, base=base)
     chosen = []
-    for p in picks[:MAX_ITEMS]:
+    for p in picks[:max_items]:
         c = dict(candidates[p["id"]])
         c["section"] = p["section"]
         chosen.append(c)
@@ -187,11 +179,17 @@ def _run_topic(topics: Topics, topic: dict, since: datetime, prefix: str) -> dic
             items.append({"section": c["section"], "title": w["title"], "summary": w["summary"],
                           "details": w.get("details", ""), "source_url": c["url"], "source_name": c["source"]})
 
-    # 5. מיזוג ופרסום
-    added = _merge(data, items, prefix)
-    if added:
-        storage.publish_text(day, json.dumps(data, ensure_ascii=False))
-    return result | {"picked": len(chosen), "added": added, "note": note,
+    # 5. מיזוג ופרסום — על הגרסה העדכנית של הגיליון (גרוק אולי עדכן פייסבוק בינתיים)
+    added = [0]
+
+    def apply(fresh: dict) -> bool:
+        fresh.setdefault("date", day)
+        added[0] = _merge(fresh, items, "" if base else EVENING, on_top=not base)
+        if base and closing and not fresh.get("closing"):
+            fresh["closing"] = closing
+        return bool(added[0])
+    edit_newsletter(storage, day, topic_title(topic["name"]), apply)
+    return result | {"picked": len(chosen), "added": added[0], "note": note,
                      "with_text": sum(1 for c in chosen if len(c.get("text", "")) > 300),
                      "input": usage["input"], "output": usage["output"], "cost_usd": round(usage["cost"], 3)}
 
@@ -207,8 +205,8 @@ def _strip_prefix(title: str) -> str:
     return title
 
 
-def _merge(data: dict, items: list[dict], prefix: str = PREFIXES[1]) -> int:
-    """ידיעות חדשות → לראש הקטגוריה שלהן (או קטגוריה חדשה בסוף). כפילויות לפי כתובת נזרקות."""
+def _merge(data: dict, items: list[dict], prefix: str = EVENING, on_top: bool = True) -> int:
+    """ידיעות חדשות → לקטגוריה שלהן (ראש הקטגוריה בעדכון, סופה בבסיס), או קטגוריה חדשה. כפילויות לפי כתובת נזרקות."""
     sections = data.setdefault("sections", [])
     seen = {_norm_url(i.get("source_url", "")) for s in sections for i in s.get("items", [])}
     by_name = {s.get("name", "").strip(): s for s in sections}
@@ -226,7 +224,8 @@ def _merge(data: dict, items: list[dict], prefix: str = PREFIXES[1]) -> int:
         })
     for name, new in fresh.items():
         if name in by_name:
-            by_name[name]["items"] = new + by_name[name].get("items", [])
+            old = by_name[name].get("items", [])
+            by_name[name]["items"] = new + old if on_top else old + new
         else:
             sections.append({"name": name, "items": new})
     return sum(len(v) for v in fresh.values())
@@ -245,7 +244,7 @@ def _slots(now: datetime) -> list[datetime]:
 
 
 def _previous_slot(now: datetime) -> datetime:
-    """תחילת החלון: שעת הריצה המתוזמנת שלפני הריצה הזו (ריצה ב-19:00 → מ-07:00)."""
+    """תחילת החלון של עדכון הערב: שעת הריצה המתוזמנת שלפניו (19:00 → מ-05:30)."""
     past = [s for s in _slots(now) if s <= now - timedelta(minutes=5)]
     return past[-1] if past else now - timedelta(hours=12)
 

@@ -1,8 +1,9 @@
-"""העורך — שתי קריאות קצרות ל-Claude, בלי חיפוש ברשת (הקוד כבר אסף את המועמדים מהפידים):
-1. select — מתוך רשימת הכותרות בוחר את החשובות ומשייך כל אחת לקטגוריה.
-2. write  — מקבל את הטקסט של הכתבות שנבחרו וכותב כותרת, תקציר והרחבה בעברית.
+"""העורך — קריאות קצרות ל-Claude, בלי חיפוש ברשת (הקוד כבר אסף את המועמדים מהפידים):
+1. select — מתוך רשימת הכותרות בוחר את החשובות ומשייך כל אחת לקטגוריה (בגיליון הבוקר גם שורת סיום).
+2. write  — מקבל את הטקסט של הכתבות שנבחרו וכותב כותרת, תקציר והרחבה בעברית (במנות, במקביל).
 """
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 MODEL = os.getenv("AGENT_MODEL", "claude-sonnet-5-5")
 # הערכת עלות בלבד — המחיר המחייב בקונסול של Anthropic. $ למיליון טוקנים: (קלט, פלט)
@@ -13,9 +14,10 @@ SELECT_TOOL = {
     "description": "מגיש את הבחירה: מספרי הידיעות שנכנסות לעדכון והקטגוריה של כל אחת. פעם אחת, בסוף.",
     "strict": True,
     "input_schema": {
-        "type": "object", "additionalProperties": False, "required": ["note", "picks"],
+        "type": "object", "additionalProperties": False, "required": ["note", "closing", "picks"],
         "properties": {
             "note": {"type": "string", "description": "משפט-שניים: לפי מה בחרת"},
+            "closing": {"type": "string", "description": "גיליון הבוקר: שורת סיום בעברית. עדכון ערב: מחרוזת ריקה"},
             "picks": {"type": "array", "items": {
                 "type": "object", "additionalProperties": False, "required": ["id", "section"],
                 "properties": {
@@ -43,15 +45,23 @@ WRITE_TOOL = {
     },
 }
 
-SELECT_SYSTEM = """אתה עורך העדכונים באתר החדשות TACT News: פעמיים ביום משלימים את הגיליון של היום במה שחדש.
-תקבל רשימה ממוספרת של ידיעות שפורסמו מאז העדכון הקודם במקורות של התחום (כותרת, מקור, שעה, ולפעמים תקציר).
-בחר את הידיעות שנכנסות לעדכון:
-- רק מה ששייך לתחום לפי התיאור שלו (פיד כללי מביא גם ידיעות לא רלוונטיות — דלג עליהן).
-- לא ידיעה שכבר בגיליון, גם לא בניסוח אחר. עדכון משמעותי לסיפור שכבר הופיע — מותר.
+SELECT_SYSTEM = """אתה עורך הניוזלטר של אתר החדשות TACT News: גיליון בוקר מלא לכל תחום, ועדכון ערב שמשלים אותו.
+תקבל רשימה ממוספרת של ידיעות שפורסמו לאחרונה במקורות של התחום (כותרת, מקור, שעה, ולפעמים תקציר).
+בחר את הידיעות שנכנסות:
+- רק מה ששייך לתחום לפי התיאור שלו (פיד כללי מביא גם ידיעות לא רלוונטיות — דלג עליהן). בתיאור, **טקסט** = חשוב ו-==טקסט== = עדיפות עליונה.
+- לא ידיעה שכבר פורסמה (הרשימה "כבר פורסם"), גם לא בניסוח אחר. עדכון משמעותי לסיפור שכבר הופיע — מותר.
 - כמה ידיעות על אותו אירוע ממקורות שונים → בחר אחת, מהמקור הטוב ביותר.
-- פזר על כל הקטגוריות של הגיליון (חוץ מ"מעקב פייסבוק"); 1–4 לכל קטגוריה שיש בה חדש.
-- חשיבות קודמת לכמות: בתחום עמוס בדרך כלל 8–15, בתחום שקט פחות, לכל היותר 18. אם אין שום דבר חדש וחשוב — רשימה ריקה.
+- הקטגוריות: שמות קצרים בעברית לפי מה שמתאים לתחום. אם יש קטגוריות קיימות — השתמש באותם שמות בדיוק. לעולם לא "מעקב פייסבוק".
+{mode}
 בסוף קרא ל-submit_selection."""
+
+MODE_BASE = """זה גיליון הבוקר — הבסיס של היום. כסה את כל מה שחשוב ב-24 השעות האחרונות, בפיזור על כל הקטגוריות של התחום (3–10 לקטגוריה).
+בתחום עמוס בדרך כלל 25–45 ידיעות, בתחום שקט פחות, לכל היותר 50. סדר בתוך כל קטגוריה: החשוב קודם.
+closing: שורת סיום אחת-שתיים בעברית — "מה בלט היום" בכמה מהידיעות החשובות."""
+
+MODE_UPDATE = """זה עדכון הערב — משלים את גיליון הבוקר במה שחדש מאז. 1–4 לכל קטגוריה שיש בה חדש.
+חשיבות קודמת לכמות: בתחום עמוס בדרך כלל 8–15, בתחום שקט פחות, לכל היותר 18. אם אין שום דבר חדש וחשוב — רשימה ריקה.
+closing: מחרוזת ריקה."""
 
 WRITE_SYSTEM = """אתה כותב את העדכונים באתר החדשות TACT News, בעברית.
 לכל ידיעה תקבל את הכותרת המקורית, המקור, והטקסט של הכתבה (לפעמים רק תקציר קצר).
@@ -106,30 +116,48 @@ def _add_usage(usage: dict, u, model: str) -> None:
     usage["cost"] += (tokens_in * p_in + (u.output_tokens or 0) * p_out) / 1e6
 
 
-def select(topic: dict, morning: list[str], sections: list[str], candidates: list[dict], now: str,
-           usage: dict, model: str = "") -> tuple[list[dict], str]:
+def select(topic: dict, known: list[str], sections: list[str], candidates: list[dict], now: str,
+           usage: dict, base: bool = False, model: str = "") -> tuple[list[dict], str, str]:
+    """מחזיר (בחירות, הערה, שורת סיום)."""
     lines = []
     for i, c in enumerate(candidates):
-        when = c["published"].astimezone().strftime("%H:%M") if c.get("published") else ""
+        when = c["published"].astimezone().strftime("%d.%m %H:%M") if c.get("published") else ""
         snip = f" — {c['snippet'][:220]}" if c.get("snippet") else ""
         lines.append(f"[{i}] {c['title']} ({c['source']}, {when}){snip}")
     prompt = (
         f"התחום: {topic['name']}\nמה מכסים בו:\n{topic.get('description') or topic['name']}\n\n"
         f"השעה עכשיו בישראל: {now}\n"
-        f"הקטגוריות בגיליון: {', '.join(sections) or '(אין)'}\n\n"
-        "מה כבר בגיליון היום:\n" + ("\n".join(f"- {t}" for t in morning) or "(אין)") + "\n\n"
+        f"הקטגוריות הקיימות: {', '.join(sections) or '(אין — קבע אותן)'}\n\n"
+        "כבר פורסם (אתמול והיום):\n" + ("\n".join(f"- {t}" for t in known) or "(אין)") + "\n\n"
         "המועמדים:\n" + "\n".join(lines)
     )
-    out = _call(SELECT_SYSTEM, prompt, SELECT_TOOL, usage, model or MODEL)
+    system = SELECT_SYSTEM.replace("{mode}", MODE_BASE if base else MODE_UPDATE)
+    out = _call(system, prompt, SELECT_TOOL, usage, model or MODEL)
     picks = [p for p in out.get("picks", []) if isinstance(p.get("id"), int) and 0 <= p["id"] < len(candidates)]
-    return picks, str(out.get("note", ""))[:400]
+    return picks, str(out.get("note", ""))[:400], str(out.get("closing", "")).strip()[:600]
+
+
+BATCH = 12   # ידיעות לקריאת כתיבה אחת — גיליון בוקר מלא מתחלק לכמה קריאות במקביל
 
 
 def write(topic: dict, chosen: list[dict], usage: dict, model: str = "") -> dict[int, dict]:
-    blocks = []
-    for i, c in enumerate(chosen):
-        body = c.get("text") or c.get("snippet") or "(אין טקסט — רק הכותרת)"
-        blocks.append(f"=== ידיעה {i} ===\nכותרת: {c['title']}\nמקור: {c['source']}\nטקסט:\n{body}")
-    prompt = f"התחום: {topic['name']}\n\n" + "\n\n".join(blocks)
-    out = _call(WRITE_SYSTEM, prompt, WRITE_TOOL, usage, model or MODEL)
-    return {it["id"]: it for it in out.get("items", []) if isinstance(it.get("id"), int)}
+    batches = [list(range(i, min(i + BATCH, len(chosen)))) for i in range(0, len(chosen), BATCH)]
+
+    def one(ids):
+        part_usage = {"input": 0, "output": 0, "cost": 0.0}
+        blocks = []
+        for i in ids:
+            c = chosen[i]
+            body = c.get("text") or c.get("snippet") or "(אין טקסט — רק הכותרת)"
+            blocks.append(f"=== ידיעה {i} ===\nכותרת: {c['title']}\nמקור: {c['source']}\nטקסט:\n{body}")
+        prompt = f"התחום: {topic['name']}\n\n" + "\n\n".join(blocks)
+        out = _call(WRITE_SYSTEM, prompt, WRITE_TOOL, part_usage, model or MODEL)
+        return part_usage, {it["id"]: it for it in out.get("items", []) if isinstance(it.get("id"), int)}
+
+    written: dict[int, dict] = {}
+    with ThreadPoolExecutor(3) as ex:
+        for part_usage, items in ex.map(one, batches):
+            for k in usage:
+                usage[k] += part_usage[k]
+            written.update(items)
+    return written

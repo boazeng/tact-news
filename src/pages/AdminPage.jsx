@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getIssues, getMe } from '../lib/api.js'
+import { getIssues, getMe, getTopics } from '../lib/api.js'
 import { todayIL } from '../lib/dates.js'
 import UploadPanel from '../components/admin/UploadPanel.jsx'
 import DaysTable from '../components/admin/DaysTable.jsx'
 import GrokPrompt from '../components/admin/GrokPrompt.jsx'
 import TopicsManager from '../components/admin/TopicsManager.jsx'
 import AgentPanel from '../components/admin/AgentPanel.jsx'
+import ReviewPanel from '../components/admin/ReviewPanel.jsx'
 
-export default function AdminPage({ topics, navigate, onChanged, onTopicsChanged }) {
+export default function AdminPage({ topics: siteTopics, navigate, onChanged, onTopicsChanged }) {
   const [me, setMe] = useState(null)
+  // בניהול — כל התחומים, גם של Longeviora (באתר עצמו הם לא מופיעים)
+  const [allTopics, setAllTopics] = useState(null)
+  const topics = allTopics || siteTopics
   const [issues, setIssues] = useState([])
   const [day, setDay] = useState(todayIL())
   const [picked, setTopic] = useState(topics[0].id)
@@ -16,11 +20,17 @@ export default function AdminPage({ topics, navigate, onChanged, onTopicsChanged
   const topic = topics.some((t) => t.id === picked) ? picked : topics[0].id
 
   const refresh = useCallback(() => {
-    getIssues(topic).then((d) => setIssues(d.issues)).catch(() => {})
+    getIssues(topic, true).then((d) => setIssues(d.issues)).catch(() => {})
     onChanged()
   }, [topic, onChanged])
 
+  const loadTopics = useCallback(() => {
+    getTopics('*').then((d) => d.topics?.length && setAllTopics(d.topics)).catch(() => {})
+  }, [])
+  const topicsChanged = useCallback(() => { loadTopics(); onTopicsChanged() }, [loadTopics, onTopicsChanged])
+
   useEffect(() => { getMe().then(setMe) }, [])
+  useEffect(() => { if (me?.role === 'admin') loadTopics() }, [me, loadTopics])
   useEffect(() => { if (me?.role === 'admin') refresh() }, [me, refresh])
 
   if (!me) return <div className="page"><div className="loading" aria-label="טוען" /></div>
@@ -59,8 +69,9 @@ export default function AdminPage({ topics, navigate, onChanged, onTopicsChanged
       </div>
       <UploadPanel topic={topic} day={day} setDay={setDay} onChanged={refresh} navigate={navigate} />
       <DaysTable topic={topic} issues={issues} onChanged={refresh} navigate={navigate} onPick={setDay} />
+      <ReviewPanel onChanged={refresh} />
       <AgentPanel topics={topics} onChanged={refresh} />
-      <TopicsManager topics={topics} onChanged={onTopicsChanged} />
+      <TopicsManager topics={topics} onChanged={topicsChanged} />
       <GrokPrompt />
     </div>
   )

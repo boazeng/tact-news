@@ -18,12 +18,14 @@ const json = (method, data) => ({
 })
 const q = (topic) => `topic=${encodeURIComponent(topic)}`
 
-export const getTopics = () => request('/api/topics')
+// בלי app → התחומים של האתר. '*' → כולל תחומי Longeviora (דף הניהול)
+export const getTopics = (app = '') => request(`/api/topics${app ? `?app=${encodeURIComponent(app)}` : ''}`)
 export const addTopic = (topic) => request('/api/topics', json('POST', topic))
 export const editTopic = (id, fields) => request(`/api/topics/${encodeURIComponent(id)}`, json('PATCH', fields))
 export const orderTopics = (ids) => request('/api/topics-order', json('PUT', { ids }))
 export const deleteTopic = (id) => request(`/api/topics/${encodeURIComponent(id)}`, { method: 'DELETE' })
-export const getIssues = (topic) => request(`/api/issues?${q(topic)}`)
+// all → גם ימים שעוד לא אושרו (מנהל)
+export const getIssues = (topic, all = false) => request(`/api/issues?${q(topic)}${all ? '&all=1' : ''}`)
 export const getIssue = (topic, day) => request(`/api/issues/${day}?${q(topic)}`)
 export const getAgent = () => request('/api/agent')
 export const runAgent = (topic = '') => request(`/api/agent/run?${q(topic)}`, { method: 'POST' })
@@ -33,3 +35,7 @@ export const paste = (topic, day, kind, text, title = '') =>
 export const deleteDay = (topic, day) => request(`/api/issues/${day}?${q(topic)}`, { method: 'DELETE' })
 export const deleteFile = (topic, day, kind, name) =>
   request(`/api/issues/${day}/${kind}/${encodeURIComponent(name)}?${q(topic)}`, { method: 'DELETE' })
+export const getReview = () => request('/api/review')
+export const previewDay = (topic, day) => request(`/api/review/${day}?${q(topic)}`)
+export const approveDay = (topic, day) => request(`/api/review/${day}?${q(topic)}`, { method: 'POST' })
+export const revokeDay = (topic, day) => request(`/api/review/${day}?${q(topic)}`, { method: 'DELETE' })

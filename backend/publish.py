@@ -96,6 +96,11 @@ def topic_title(name: str) -> str:
     return f"חדשות לבועז — {name}"
 
 
+def issue_title(topic: dict) -> str:
+    """כותרת הגיליון: באתר — "חדשות לבועז — <תחום>"; בתחום של אפליקציה אחרת (Longeviora) — שם התחום בלבד."""
+    return topic["name"] if topic.get("app") else topic_title(topic["name"])
+
+
 def edit_newsletter(storage: Storage, day: str, title: str, fn) -> dict:
     """קורא את הגיליון של היום (או מתחיל ריק), fn(data) משנה אותו, ושומר — הכול בתוך המנעול."""
     with NEWSLETTER_LOCK:
@@ -110,8 +115,8 @@ def edit_newsletter(storage: Storage, day: str, title: str, fn) -> dict:
         return data
 
 
-def set_section(storage: Storage, title: str, name: str, items, date: str = "") -> dict:
-    """מחליף קטגוריה אחת בגיליון (פייסבוק של גרוק) — בלי לגעת בשאר. רשימה ריקה = מוחק את הקטגוריה."""
+def _stories(items) -> list[dict]:
+    """רשימת ידיעות (JSON או list). רשימה ריקה מותרת."""
     if isinstance(items, str):
         try:
             items = json.loads(strip_code_fences(items) or "[]")
@@ -119,11 +124,16 @@ def set_section(storage: Storage, title: str, name: str, items, date: str = "") 
             raise StorageError(f"הידיעות אינן JSON תקין: {e}") from e
     if not isinstance(items, list):
         raise StorageError("צריך רשימה של ידיעות")
-    clean = []
     for x in items:
         if not isinstance(x, dict) or not str(x.get("title", "")).strip():
             raise StorageError('כל ידיעה צריכה "title"')
-        clean.append({k: str(x.get(k, "")).strip() for k in ("title", "summary", "details", "source_url", "source_name")})
+    return items
+
+
+def set_section(storage: Storage, title: str, name: str, items, date: str = "") -> dict:
+    """מחליף קטגוריה אחת בגיליון (פייסבוק של גרוק) — בלי לגעת בשאר. רשימה ריקה = מוחק את הקטגוריה."""
+    clean = [{k: str(x.get(k, "")).strip() for k in ("title", "summary", "details", "source_url", "source_name")}
+             for x in _stories(items)]
     day = resolve_date(storage, date, None)
 
     def apply(data):
@@ -140,3 +150,40 @@ def newsletter(storage: Storage, day: str) -> dict:
     nl = storage.day_info(day)["newsletter"]
     return {"topic": storage.topic, "date": day, "published": bool(nl),
             "newsletter": (nl or {}).get("data"), "url": page_url(storage, day)}
+
+
+PROMOTED = {"he": "מקודם", "en": "Promoted"}
+
+
+def save_promoted(storage: Storage, topic: dict, items, date: str = "") -> dict:
+    """פוסטים ממומנים (תחום kind=promote) — מחליף את כל הפוסטים של היום. רשימה ריקה = מוחק אותם.
+    כל פוסט: title, summary, details?, source_url, source_name (= הארגון המממן), image_url?, cta_label?, section?"""
+    if topic.get("kind") != "promote":
+        raise StorageError(f'set_promoted רק לתחומי פוסטים ממומנים (kind=promote); "{topic["id"]}" אינו כזה')
+    sections: dict[str, list[dict]] = {}
+    for x in _stories(items):
+        url, image = str(x.get("source_url", "")).strip(), str(x.get("image_url") or "").strip()
+        if not url.startswith(("https://", "http://")):
+            raise StorageError(f'"{x["title"]}": צריך source_url — הקישור של הארגון')
+        if not str(x.get("source_name", "")).strip():
+            raise StorageError(f'"{x["title"]}": צריך source_name — שם הארגון המממן')
+        if image and not image.startswith("https://"):
+            raise StorageError(f'"{x["title"]}": image_url חייב להתחיל ב-https://')
+        post = {"title": str(x["title"]).strip()[:200], "summary": str(x.get("summary", "")).strip()[:1200],
+                "details": str(x.get("details", "")).strip()[:4000], "source_url": url,
+                "source_name": str(x["source_name"]).strip()[:120]}
+        if image:
+            post["image_url"] = image
+        if str(x.get("cta_label") or "").strip():
+            post["cta_label"] = str(x["cta_label"]).strip()[:30]
+        name = str(x.get("section") or "").strip()[:40] or PROMOTED.get(topic.get("lang", "he"), PROMOTED["en"])
+        sections.setdefault(name, []).append(post)
+    day = resolve_date(storage, date, None)
+    with NEWSLETTER_LOCK:
+        if sections:
+            data = {"title": topic["name"], "date": day,
+                    "sections": [{"name": n, "items": v} for n, v in sections.items()]}
+            storage.publish_text(day, json.dumps(data, ensure_ascii=False))
+        elif (nl := storage.day_info(day)["newsletter"]):
+            storage.delete_file(day, "newsletter", nl["name"])
+    return status(storage, day) | {"ok": True, "saved": sum(len(v) for v in sections.values())}

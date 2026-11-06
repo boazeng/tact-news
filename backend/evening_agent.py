@@ -23,7 +23,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from . import editor, feeds
-from .publish import FACEBOOK, edit_newsletter, topic_title
+from .publish import FACEBOOK, edit_newsletter, issue_title
 from .storage import today
 from .topics import Topics
 
@@ -35,7 +35,8 @@ RUN_TIMES = [t.strip() for t in os.getenv("RUN_TIMES", "05:30,19:00").split(",")
 MARGIN = timedelta(minutes=30)      # חפיפה קטנה עם החלון הקודם — כפילויות נזרקות ממילא
 BASE_WINDOW = timedelta(hours=24)   # גיליון הבוקר
 EVENING = "🆕 עדכון ערב: "
-PREFIXES = ("🆕 עדכון בוקר: ", EVENING)   # "עדכון בוקר" — מגיליונות 1–2.11, נשאר לזיהוי בלבד
+EVENING_EN = "🆕 Evening update: "        # תחום באנגלית (Longeviora)
+PREFIXES = ("🆕 עדכון בוקר: ", EVENING, EVENING_EN)   # "עדכון בוקר" — מגיליונות 1–2.11, נשאר לזיהוי בלבד
 LIMITS = {True: (260, 50), False: (160, 18)}   # base → (כותרות לבחירה, ידיעות לכתיבה)
 KEEP_RUNS = 60
 
@@ -98,7 +99,8 @@ def run_evening(topics: Topics, only: str = "", trigger: str = "schedule") -> di
                "kind": "base" if base else "update", "since": since.isoformat(timespec="minutes"), "topics": []}
         _save_run(topics, run)
         for t in topics.listing():
-            if (only and t["id"] != only) or "newsletter" not in t["tabs"]:
+            # promote = פוסטים ממומנים של גרוק (Longeviora) — Claude לא כותב בהם
+            if (only and t["id"] != only) or "newsletter" not in t["tabs"] or t.get("kind") == "promote":
                 continue
             try:
                 result = _run_topic(topics, t, since, base)
@@ -184,11 +186,13 @@ def _run_topic(topics: Topics, topic: dict, since: datetime, base: bool) -> dict
 
     def apply(fresh: dict) -> bool:
         fresh.setdefault("date", day)
-        added[0] = _merge(fresh, items, "" if base else EVENING, on_top=not base)
+        english = topic.get("lang") == "en"
+        added[0] = _merge(fresh, items, "" if base else (EVENING_EN if english else EVENING), on_top=not base,
+                          fallback="Updates" if english else "עדכונים")
         if base and closing and not fresh.get("closing"):
             fresh["closing"] = closing
         return bool(added[0])
-    edit_newsletter(storage, day, topic_title(topic["name"]), apply)
+    edit_newsletter(storage, day, issue_title(topic), apply)
     return result | {"picked": len(chosen), "added": added[0], "note": note,
                      "with_text": sum(1 for c in chosen if len(c.get("text", "")) > 300),
                      "input": usage["input"], "output": usage["output"], "cost_usd": round(usage["cost"], 3)}
@@ -205,7 +209,8 @@ def _strip_prefix(title: str) -> str:
     return title
 
 
-def _merge(data: dict, items: list[dict], prefix: str = EVENING, on_top: bool = True) -> int:
+def _merge(data: dict, items: list[dict], prefix: str = EVENING, on_top: bool = True,
+           fallback: str = "עדכונים") -> int:
     """ידיעות חדשות → לקטגוריה שלהן (ראש הקטגוריה בעדכון, סופה בבסיס), או קטגוריה חדשה. כפילויות לפי כתובת נזרקות."""
     sections = data.setdefault("sections", [])
     seen = {_norm_url(i.get("source_url", "")) for s in sections for i in s.get("items", [])}
@@ -218,7 +223,7 @@ def _merge(data: dict, items: list[dict], prefix: str = EVENING, on_top: bool = 
         seen.add(key)
         title = it["title"].strip()
         title = title if title.startswith("🆕") else prefix + title
-        fresh.setdefault(it["section"].strip() or "עדכונים", []).append({
+        fresh.setdefault(it["section"].strip() or fallback, []).append({
             "title": title, "summary": it["summary"].strip(), "details": it["details"].strip(),
             "source_url": it["source_url"].strip(), "source_name": it["source_name"].strip(),
         })

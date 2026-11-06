@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from shared_auth import require_role
 
-from . import audio_intake, evening_agent
+from . import audio_intake, evening_agent, review
 from .media import maybe_transcode
 from .publish import publish, require_token, resolve_date, token_ok
 from .storage import MEDIA_TYPES, RETENTION_DAYS, StorageError, has_content, safe_name, today
@@ -29,14 +29,22 @@ def build_router(topics: Topics) -> APIRouter:
     def store(topic: str):
         return guard(topics.get, topic)
 
+    def reviewed(topic: str) -> bool:
+        """תחום שהציבור רואה בו רק גרסה מאושרת (Longeviora)."""
+        return guard(topics.info, topic)["review"]
+
     # ───────── ציבורי ─────────
     @router.get("/api/health")
     def health():
         return {"ok": True}
 
     @router.get("/api/topics")
-    def list_topics():
-        return {"topics": topics.listing()}
+    def list_topics(request: Request, app: str = ""):
+        """בלי app → התחומים של TACT News. app=longeviora → רק של האפליקציה הזו. app=* → הכול (מנהל)."""
+        if app == "*":
+            require_role("admin")(request)
+            return {"topics": topics.listing()}
+        return {"topics": topics.listing(app)}
 
     class NewTopic(BaseModel):
         id: str
@@ -80,21 +88,29 @@ def build_router(topics: Topics) -> APIRouter:
         return {"ok": True, "topics": topics.listing()}
 
     @router.get("/api/issues")
-    def list_issues(topic: str = ""):
+    def list_issues(request: Request, topic: str = "", all: bool = False):
+        """all=1 (מנהל) → גם ימים שעוד לא אושרו."""
         storage = store(topic)
-        return {"topic": storage.topic, "issues": storage.list_days(), "today": today().isoformat(),
+        if all:
+            require_role("admin")(request)
+        days = review.public_days(storage) if reviewed(topic) and not all else storage.list_days()
+        return {"topic": storage.topic, "issues": days, "today": today().isoformat(),
                 "retention_days": RETENTION_DAYS}
 
     @router.get("/api/issues/{day}")
     def get_issue(day: str, topic: str = ""):
-        info = guard(store(topic).day_info, day)
-        if not has_content(info):
+        storage = store(topic)
+        info = guard(review.public_info, storage, day) if reviewed(topic) else guard(storage.day_info, day)
+        if not info or not has_content(info):
             raise HTTPException(404, "אין גיליון לתאריך הזה")
         return info
 
     def serve_file(topic: str, day: str, kind: str, name: str):
         try:
-            path = topics.get(topic).file_path(day, kind, name)
+            storage = topics.get(topic)
+            path = storage.file_path(day, kind, name)
+            if topics.info(topic)["review"] and not review.file_allowed(storage, day, kind, name):
+                raise StorageError("קובץ לא קיים")
         except StorageError as e:
             raise HTTPException(404, str(e)) from e
         resp = FileResponse(str(path), media_type=MEDIA_TYPES.get(path.suffix.lower()))
@@ -113,6 +129,27 @@ def build_router(topics: Topics) -> APIRouter:
     def get_file_legacy(day: str, kind: str, name: str):
         """קישורים מלפני התחומים."""
         return serve_file(LEGACY_TOPIC, day, kind, name)
+
+    # ───────── אישור (תחומים עם review) ─────────
+    @router.get("/api/review")
+    def review_overview(app: str = "", _admin=admin):
+        """כל התחומים שדורשים אישור, וכל יום: pending / approved / changed."""
+        rows = [t for t in topics.listing(app or None) if t["review"]]
+        return {"topics": [dict(t, days=review.overview(topics.get(t["id"]))) for t in rows]}
+
+    @router.get("/api/review/{day}")
+    def review_preview(day: str, topic: str = "", _admin=admin):
+        """התוכן החי של היום (מה שיאושר) + המצב."""
+        storage = store(topic)
+        return guard(storage.day_info, day) | {"review": guard(review.state, storage, day)}
+
+    @router.post("/api/review/{day}")
+    def review_approve(day: str, topic: str = "", user=admin):
+        return guard(review.approve, store(topic), day, user.get("email", ""))
+
+    @router.delete("/api/review/{day}")
+    def review_revoke(day: str, topic: str = "", _admin=admin):
+        return guard(review.revoke, store(topic), day)
 
     # ───────── מנהל ─────────
     @router.post("/api/issues/{day}/upload")

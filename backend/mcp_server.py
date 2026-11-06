@@ -12,9 +12,9 @@ from mcp.server.transport_security import TransportSecuritySettings
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
-from . import audio_intake
-from .publish import (FACEBOOK, add_list, newsletter, publish, resolve_date, set_section, status, token_ok,
-                      topic_title)
+from . import audio_intake, review
+from .publish import (FACEBOOK, add_list, issue_title, newsletter, publish, resolve_date, save_promoted,
+                      set_section, status, token_ok)
 from .storage import StorageError
 from .topics import Topics
 
@@ -27,7 +27,11 @@ INSTRUCTIONS = (
     "THE NEWSLETTER IS BUILT BY CLAUDE (05:30 and 19:00 Israel time) — you do not publish it. Your part: "
     "the Facebook section (set_facebook_section), podcasts + NotebookLM audio (read the day's newsletter with "
     "get_newsletter as the material), YouTube, guides and papers. Check with get_status. All text in Hebrew. "
-    "Days are deleted automatically after 14 days."
+    "Days are deleted automatically after 14 days. "
+    "Some topics belong to another app, Longeviora (field app=\"longeviora\"): they are NOT shown on TACT News, "
+    "each has lang (he/en — write in that language) and kind (news / promote), and review=true means nothing is "
+    "public until Boaz approves the day. For kind=news: papers, podcasts and YouTube only (no Facebook). "
+    "For kind=promote: only set_promoted (sponsored posts)."
 )
 
 FACEBOOK_FORMAT = """\
@@ -37,11 +41,17 @@ items_json — JSON array (as a string) of Facebook posts worth reporting:
 Replaces only the "מעקב פייסבוק" section of that day; the rest of the newsletter is untouched.
 An empty array removes the section."""
 
+PROMOTED_FORMAT = """\
+items_json — JSON array (as a string) of sponsored posts:
+[ { "title": "...", "summary": "2–4 sentences", "details": "optional, paragraphs separated by \\n",
+    "source_url": "https://... (the organization's page)", "source_name": "the sponsoring organization",
+    "image_url": "optional, https://...", "cta_label": "optional button text, up to 30 chars" } ]"""
+
 TOPIC_ARG = "topic = topic id from list_topics (empty = the default topic)."
 
 
 def build_mcp(topics: Topics) -> MCPServer:
-    server = MCPServer(name="tact-news", instructions=INSTRUCTIONS, version="3.0.0")
+    server = MCPServer(name="tact-news", instructions=INSTRUCTIONS, version="3.1.0")
 
     def call(ctx: Context, fn) -> dict[str, Any]:
         headers = ctx.headers or {}
@@ -61,9 +71,6 @@ def build_mcp(topics: Topics) -> MCPServer:
     def list_topics(ctx: Context) -> dict[str, Any]:
         return call(ctx, lambda: {"topics": topics.listing()})
 
-    def topic_name(storage) -> str:
-        return next((t["name"] for t in topics.listing() if t["id"] == storage.topic), storage.topic)
-
     @server.tool(description=(
         "NOT AVAILABLE ANY MORE — the newsletter is built by Claude. Calling it returns an error. "
         "Use set_facebook_section for Facebook, and add_podcast_links / add_youtube_links / add_guide_links / "
@@ -79,9 +86,19 @@ def build_mcp(topics: Topics) -> MCPServer:
     def set_facebook_section(ctx: Context, items_json: str, date: str = "",
                              topic: str = "") -> dict[str, Any]:
         def run():
-            storage = topics.get(topic)
-            return set_section(storage, topic_title(topic_name(storage)), FACEBOOK, items_json, date)
+            info = topics.info(topic)
+            if info["app"]:
+                raise StorageError(f'אין מעקב פייסבוק בתחום "{info["id"]}" (תחום של {info["app"]})')
+            return set_section(topics.get(topic), issue_title(info), FACEBOOK, items_json, date)
         return call(ctx, run)
+
+    @server.tool(description=(
+        "Set the SPONSORED POSTS of a day in a promote topic (kind=promote in list_topics, e.g. "
+        "longeviora-promote / longeviora-promote-en) — replaces all of that day's posts; an empty array removes "
+        "them. Write in the topic's lang. Nothing is public until Boaz approves the day. date defaults to today. "
+        + TOPIC_ARG + "\n" + PROMOTED_FORMAT))
+    def set_promoted(ctx: Context, items_json: str, date: str = "", topic: str = "") -> dict[str, Any]:
+        return call(ctx, lambda: save_promoted(topics.get(topic), topics.info(topic), items_json, date))
 
     @server.tool(description=(
         "The full newsletter of a day (default today) in a topic — sections with title, summary, details and "
@@ -154,8 +171,11 @@ def build_mcp(topics: Topics) -> MCPServer:
     def get_status(ctx: Context, date: str = "", topic: str = "") -> dict[str, Any]:
         def run():
             storage = topics.get(topic)
-            return status(storage, resolve_date(storage, date, None)) | {
-                "days_on_site": [d["date"] for d in storage.list_days()]}
+            day = resolve_date(storage, date, None)
+            out = status(storage, day) | {"days_on_site": [d["date"] for d in storage.list_days()]}
+            if topics.info(topic)["review"]:
+                out["approval"] = review.state(storage, day)["status"]   # pending / approved / changed
+            return out
         return call(ctx, run)
 
     return server

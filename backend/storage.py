@@ -79,7 +79,7 @@ class Storage:
             if d.is_dir() and _DATE_RE.match(d.name):
                 info = self.day_info(d.name)
                 if has_content(info):
-                    days.append(_summary(info))
+                    days.append(summary(info))
         return days
 
     def day_info(self, day: str) -> dict:
@@ -374,7 +374,7 @@ def _list_files(folder: Path, topic: str, day: str, kind: str) -> list[dict]:
     ]
 
 
-def _summary(info: dict) -> dict:
+def summary(info: dict) -> dict:
     nl = info["newsletter"] or {}
     data = nl.get("data") or {}
     items = sum(len(s.get("items", [])) for s in data.get("sections", []))

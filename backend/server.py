@@ -30,7 +30,7 @@ from fastapi import FastAPI, HTTPException  # noqa: E402
 from fastapi.responses import FileResponse  # noqa: E402
 from shared_auth import install_auth  # noqa: E402
 
-from . import evening_agent  # noqa: E402
+from . import apps, evening_agent  # noqa: E402
 from .api import build_router  # noqa: E402
 from .mcp_server import install_mcp  # noqa: E402
 from .topics import Topics  # noqa: E402
@@ -42,6 +42,7 @@ DIST_DIR = PROJECT_ROOT / "dist"
 DATA_DIR = Path(os.getenv("TACT_NEWS_DATA_DIR", str(PROJECT_ROOT / "database")))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 topics = Topics(DATA_DIR)   # בעלייה הראשונה מעביר ימים מלפני התחומים לתחום ברירת המחדל
+apps.ensure(topics)        # תחומי Longeviora (apps.py) — לא מוצגים ב-TACT News
 
 
 async def _retention_loop():

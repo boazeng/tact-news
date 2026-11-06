@@ -31,6 +31,8 @@ MAX_DESCRIPTION = 1500
 MAX_SOURCES = 6000      # מקורות החדשות של התחום — "שם | כתובת-פיד" בכל שורה (גרוק + עדכון הערב)
 # הלשוניות שאפשר להפעיל בכל תחום. tabs של תחום = מה גרוק ממלא בו ומה מוצג באתר.
 TAB_IDS = ("newsletter", "podcasts", "youtube", "guides", "papers")
+# תחום של אפליקציה אחרת (Longeviora) — לא מופיע באתר ובאפליקציה של TACT News. נקבע בקוד (apps.py), לא בטופס
+APP_FIELDS = ("app", "lang", "kind", "review")
 _ID_RE = re.compile(r"^[a-z][a-z0-9-]{1,23}$")
 _COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 _DATE_DIR = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -51,7 +53,7 @@ class Topics:
     # ───────── קריאה ─────────
     def get(self, topic: str | None) -> Storage:
         """topic ריק → ברירת המחדל (הראשון ברשימה)."""
-        tid = (topic or "").strip().lower() or self._list[0]["id"]
+        tid = (topic or "").strip().lower() or self._default_id()
         store = self._stores.get(tid)
         if not store:
             raise StorageError(f"תחום לא מוכר: {topic}. התחומים באתר: {', '.join(self._stores)}")
@@ -60,9 +62,21 @@ class Topics:
     def all(self) -> list[Storage]:
         return list(self._stores.values())
 
-    def listing(self) -> list[dict]:
-        return [dict(t, default=i == 0, tabs=t.get("tabs") or list(TAB_IDS), sources=t.get("sources", ""))
-                for i, t in enumerate(self._list)]
+    def info(self, topic: str | None) -> dict:
+        """הרשומה של התחום (topic ריק → ברירת המחדל)."""
+        tid = self.get(topic).topic
+        return next(t for t in self.listing() if t["id"] == tid)
+
+    def listing(self, app: str | None = None) -> list[dict]:
+        """app=None → כל התחומים (גרוק, Claude, ניהול). app="" → רק של TACT News. app="x" → רק של האפליקציה x.
+        default = הראשון ברשימה שהוחזרה."""
+        rows = [t for t in self._list if app is None or (t.get("app") or "") == app]
+        return [dict(t, default=i == 0, tabs=t.get("tabs") or list(TAB_IDS), sources=t.get("sources", ""),
+                     app=t.get("app", ""), review=bool(t.get("review")))
+                for i, t in enumerate(rows)]
+
+    def _default_id(self) -> str:
+        return next((t["id"] for t in self._list if not t.get("app")), self._list[0]["id"])
 
     # ───────── ניהול ─────────
     def add(self, tid: str, name: str, color: str = "", description: str = "",
@@ -116,6 +130,22 @@ class Topics:
                 topic["sources"] = sources.strip()[:MAX_SOURCES]
             self._save()
         return topic
+
+    def ensure(self, spec: dict) -> None:
+        """תחום שמוגדר בקוד (apps.py): נוסף אם חסר; אם קיים — רק שדות האפליקציה מתעדכנים,
+        שם/תיאור/מקורות שנערכו בדף הניהול נשארים."""
+        with self._lock:
+            topic = next((t for t in self._list if t["id"] == spec["id"]), None)
+            if topic is None:
+                topic = {k: v for k, v in spec.items()}
+                topic["tabs"] = _clean_tabs(spec.get("tabs"))
+                self._list.append(topic)
+                self._stores[spec["id"]] = Storage(self.data_dir, spec["id"])
+                logger.info("נוסף תחום %s (%s)", spec["id"], spec.get("app"))
+            elif all(topic.get(k) == spec.get(k) for k in APP_FIELDS):
+                return
+            topic.update({k: spec[k] for k in APP_FIELDS if k in spec})
+            self._save()
 
     def reorder(self, ids: list[str]) -> None:
         """סדר חדש — חייב לכלול כל תחום פעם אחת בדיוק. הראשון הופך לברירת המחדל."""

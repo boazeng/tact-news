@@ -73,6 +73,17 @@ WRITE_SYSTEM = """אתה כותב את העדכונים באתר החדשות TA
 בסוף קרא ל-submit_items עם כל הידיעות."""
 
 
+LANG_EN = """
+
+LANGUAGE: this topic is in ENGLISH. Write everything in English — category names, the closing line, titles,
+summaries and details. This overrides every instruction above to write in Hebrew."""
+
+
+def _lang(topic: dict) -> str:
+    """תחום באנגלית (lang=en, Longeviora) — אותן הוראות, ושורה שמחליפה את השפה."""
+    return LANG_EN if topic.get("lang") == "en" else ""
+
+
 def _client():
     import anthropic  # noqa: PLC0415 — רק כשהסוכן רץ
     return anthropic.Anthropic(timeout=600, max_retries=3)
@@ -131,7 +142,7 @@ def select(topic: dict, known: list[str], sections: list[str], candidates: list[
         "כבר פורסם (אתמול והיום):\n" + ("\n".join(f"- {t}" for t in known) or "(אין)") + "\n\n"
         "המועמדים:\n" + "\n".join(lines)
     )
-    system = SELECT_SYSTEM.replace("{mode}", MODE_BASE if base else MODE_UPDATE)
+    system = SELECT_SYSTEM.replace("{mode}", MODE_BASE if base else MODE_UPDATE) + _lang(topic)
     out = _call(system, prompt, SELECT_TOOL, usage, model or MODEL)
     picks = [p for p in out.get("picks", []) if isinstance(p.get("id"), int) and 0 <= p["id"] < len(candidates)]
     return picks, str(out.get("note", ""))[:400], str(out.get("closing", "")).strip()[:600]
@@ -150,8 +161,10 @@ def write(topic: dict, chosen: list[dict], usage: dict, model: str = "") -> dict
             c = chosen[i]
             body = c.get("text") or c.get("snippet") or "(אין טקסט — רק הכותרת)"
             blocks.append(f"=== ידיעה {i} ===\nכותרת: {c['title']}\nמקור: {c['source']}\nטקסט:\n{body}")
-        prompt = f"התחום: {topic['name']}\n\n" + "\n\n".join(blocks)
-        out = _call(WRITE_SYSTEM, prompt, WRITE_TOOL, part_usage, model or MODEL)
+        # בתחום של אפליקציה לקהל (Longeviora) גם הכותב מקבל את התיאור — בו הטון (בלי ייעוץ רפואי)
+        about = f"מה מכסים בו ובאיזה טון:\n{topic['description']}\n" if topic.get("app") else ""
+        prompt = f"התחום: {topic['name']}\n{about}\n" + "\n\n".join(blocks)
+        out = _call(WRITE_SYSTEM + _lang(topic), prompt, WRITE_TOOL, part_usage, model or MODEL)
         return part_usage, {it["id"]: it for it in out.get("items", []) if isinstance(it.get("id"), int)}
 
     written: dict[int, dict] = {}

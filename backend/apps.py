@@ -23,6 +23,19 @@ def _gnews(query: str, tail: str) -> str:
     return "https://news.google.com/rss/search?q=" + quote(query) + tail
 
 
+def _sites(*hosts: str) -> str:
+    """חיפוש נושא רק באתרים מוכרים — חיפוש פתוח הביא אתרים חלשים (6.11)."""
+    return "(" + " OR ".join(f"site:{h}" for h in hosts) + ")"
+
+
+_EN_OUTLETS = _sites("reuters.com", "theguardian.com", "statnews.com", "newscientist.com", "nytimes.com",
+                     "washingtonpost.com", "bbc.com", "npr.org", "scientificamerican.com", "science.org",
+                     "nature.com", "cnn.com", "apnews.com")
+_HE_OUTLETS = _sites("ynet.co.il", "haaretz.co.il", "globes.co.il", "mako.co.il", "maariv.co.il",
+                     "israelhayom.co.il", "calcalist.co.il", "walla.co.il", "kan.org.il", "n12.co.il",
+                     "davidson.weizmann.ac.il")
+
+
 _SOURCES_EN = [
     ("ScienceDaily — Healthy Aging", "https://www.sciencedaily.com/rss/health_medicine/healthy_aging.xml"),
     ("ScienceDaily — Nutrition", "https://www.sciencedaily.com/rss/health_medicine/nutrition.xml"),
@@ -37,18 +50,15 @@ _SOURCES_EN = [
     ("WHO", "https://www.who.int/rss-feeds/news-english.xml"),
     ("NIH", _gnews("site:nih.gov when:3d", _GN_EN)),
     ("Harvard Health", _gnews("site:health.harvard.edu when:7d", _GN_EN)),
-    ("Google News — longevity research", _gnews("healthspan OR longevity research when:2d", _GN_EN)),
-    ("Google News — aging studies", _gnews("aging study OR ageing study when:2d", _GN_EN)),
+    ("Major outlets — longevity", _gnews(f"(longevity OR healthspan OR aging research) {_EN_OUTLETS} when:2d", _GN_EN)),
+    ("Major outlets — sleep, exercise, nutrition", _gnews(f"(sleep OR exercise OR nutrition) study {_EN_OUTLETS} when:2d", _GN_EN)),
 ]
 
 _SOURCES_HE = [
     ("מעריב — בריאות", "https://www.maariv.co.il/Rss/RssFeedsBriut"),
     ("ynet — בריאות", _gnews("site:ynet.co.il/health when:2d", _GN_HE)),
-    ("חדשות — הזדקנות", _gnews("הזדקנות מחקר when:3d", _GN_HE)),
-    ("חדשות — אריכות ימים", _gnews("אריכות ימים when:3d", _GN_HE)),
-    ("חדשות — שינה", _gnews("שינה מחקר when:3d", _GN_HE)),
-    ("חדשות — תזונה", _gnews("תזונה מחקר when:3d", _GN_HE)),
-    ("חדשות — פעילות גופנית", _gnews("פעילות גופנית מחקר when:3d", _GN_HE)),
+    ("אתרי חדשות — אריכות ימים", _gnews(f"(הזדקנות OR אריכות ימים OR תוחלת חיים) {_HE_OUTLETS} when:3d", _GN_HE)),
+    ("אתרי חדשות — שינה, תזונה, כושר", _gnews(f"(שינה OR תזונה OR פעילות גופנית) מחקר {_HE_OUTLETS} when:3d", _GN_HE)),
 ]
 
 

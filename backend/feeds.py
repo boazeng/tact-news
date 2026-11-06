@@ -61,8 +61,9 @@ def _read_feed(src: dict) -> list[dict]:
     _, raw = _get(src["url"])
     feed = feedparser.parse(raw)
     gnews = "news.google.com" in src["url"]
-    # חיפוש נושא ב-Google News (לא site:) — שם המקור הוא תווית החיפוש, אז לוקחים את שם האתר מהפריט
-    by_outlet = gnews and "site%3A" not in src["url"] and "site:" not in src["url"]
+    # חיפוש ב-Google News שאינו אתר אחד (נושא, או כמה site: עם OR) — שם המקור הוא תווית החיפוש,
+    # אז לוקחים את שם האתר מהפריט
+    by_outlet = gnews and src["url"].count("site%3A") + src["url"].count("site:") != 1
     items = []
     for e in feed.entries[:MAX_PER_FEED]:
         title = _clean(e.get("title", ""), 300)

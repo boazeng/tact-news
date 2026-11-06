@@ -61,6 +61,8 @@ def _read_feed(src: dict) -> list[dict]:
     _, raw = _get(src["url"])
     feed = feedparser.parse(raw)
     gnews = "news.google.com" in src["url"]
+    # חיפוש נושא ב-Google News (לא site:) — שם המקור הוא תווית החיפוש, אז לוקחים את שם האתר מהפריט
+    by_outlet = gnews and "site%3A" not in src["url"] and "site:" not in src["url"]
     items = []
     for e in feed.entries[:MAX_PER_FEED]:
         title = _clean(e.get("title", ""), 300)
@@ -69,8 +71,9 @@ def _read_feed(src: dict) -> list[dict]:
             continue
         if gnews:  # "כותרת - שם המקור" → כותרת
             title = re.sub(r"\s+-\s+[^-]{2,60}$", "", title)
+        outlet = _clean((e.get("source") or {}).get("title", ""), 80) if by_outlet else ""
         items.append({
-            "source": src["name"], "title": title, "url": link, "gnews": gnews,
+            "source": outlet or src["name"], "title": title, "url": link, "gnews": gnews,
             "published": _when(e),
             "snippet": "" if gnews else _clean(e.get("summary", ""), 400),
         })

@@ -33,7 +33,7 @@ These are newsletter stories with extra fields:
 ```
 
 - Sections default to `מקודם` (he) or `Promoted` (en). Grok may set its own `section`.
-- Days are deleted after 14 days, like every topic. A day with no posts has no issue.
+- Days are deleted after 30 days, like every topic (uploaded audio after 7 days). A day with no posts has no issue.
 
 ## Approval (`backend/review.py`)
 

@@ -43,6 +43,14 @@ def revoke(storage: Storage, day: str) -> dict:
     return state(storage, day)
 
 
+def _approved(storage: Storage, day: str, snap: dict) -> dict:
+    """התוכן המאושר, בלי קבצי אודיו שכבר נמחקו (AUDIO_RETENTION_DAYS) — מחיקה כזו לא "משנה" את היום."""
+    info = dict(snap["info"])
+    info["podcasts"] = [f for f in info.get("podcasts") or []
+                        if (storage.day_dir(day) / "podcasts" / f.get("name", "")).is_file()]
+    return info
+
+
 def state(storage: Storage, day: str) -> dict:
     """pending = יש תוכן ולא אושר · approved = הציבור רואה בדיוק את מה שיש · changed = אושר, ויש שינויים שממתינים."""
     info = storage.day_info(day)
@@ -50,7 +58,7 @@ def state(storage: Storage, day: str) -> dict:
     if not snap:
         status = "pending" if has_content(info) else "empty"
     else:
-        status = "approved" if _content(snap["info"]) == _content(info) else "changed"
+        status = "approved" if _content(_approved(storage, day, snap)) == _content(info) else "changed"
     return {"date": day, "status": status, "approved_at": (snap or {}).get("approved_at", ""),
             "live": summary(info),
             "public": summary(public_info(storage, day)) if snap else None}
@@ -61,8 +69,9 @@ def public_info(storage: Storage, day: str) -> dict | None:
     snap = _snap(storage, day)
     if not snap:
         return None
+    info = _approved(storage, day, snap)
     return {"topic": storage.topic, "date": day, "expires": expires_on(day),
-            **{k: snap["info"].get(k) or ([] if k != "newsletter" else None) for k in FIELDS}}
+            **{k: info.get(k) or ([] if k != "newsletter" else None) for k in FIELDS}}
 
 
 def public_days(storage: Storage) -> list[dict]:

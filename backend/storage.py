@@ -1,4 +1,5 @@
-"""אחסון הגיליונות — תיקייה לכל יום בכל תחום, ומחיקה אוטומטית אחרי RETENTION_DAYS.
+"""אחסון הגיליונות — תיקייה לכל יום בכל תחום. היום נמחק אחרי RETENTION_DAYS (30), וקבצי האודיו שבו
+(podcasts/ — NotebookLM, כבדים) כבר אחרי AUDIO_RETENTION_DAYS (7). הקישורים לפרקים (links.json) נשארים.
 
     database/issues/<topic>/2026-10-23/
         newsletter.json | newsletter.html | newsletter.pdf   ← לשונית "ניוזלטר" (אחד בלבד)
@@ -17,7 +18,8 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Asia/Jerusalem")
-RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "14"))
+RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "30"))
+AUDIO_RETENTION_DAYS = int(os.getenv("AUDIO_RETENTION_DAYS", "7"))
 
 KINDS = ("newsletter", "podcasts", "materials")
 NEWSLETTER_EXTS = (".json", ".html", ".pdf")
@@ -204,17 +206,23 @@ class Storage:
 
     # ───────── retention ─────────
     def purge_expired(self) -> list[str]:
-        """מוחק ימים ישנים מ-RETENTION_DAYS. מחזיר את התאריכים שנמחקו."""
+        """מוחק ימים ישנים מ-RETENTION_DAYS, ואת האודיו של ימים ישנים מ-AUDIO_RETENTION_DAYS.
+        מחזיר מה נמחק ("2026-10-01" = כל היום, "2026-10-24 אודיו" = רק האודיו)."""
         cutoff = today() - timedelta(days=RETENTION_DAYS)
+        audio_cutoff = today() - timedelta(days=AUDIO_RETENTION_DAYS)
         removed = []
         for d in self.root.iterdir():
             if d.is_dir() and _DATE_RE.match(d.name):
                 try:
-                    if date.fromisoformat(d.name) < cutoff:
-                        shutil.rmtree(d, ignore_errors=True)
-                        removed.append(d.name)
+                    day = date.fromisoformat(d.name)
                 except ValueError:
                     continue
+                if day < cutoff:
+                    shutil.rmtree(d, ignore_errors=True)
+                    removed.append(d.name)
+                elif day < audio_cutoff and (d / "podcasts").is_dir():
+                    shutil.rmtree(d / "podcasts", ignore_errors=True)
+                    removed.append(f"{d.name} אודיו")
         return removed
 
 

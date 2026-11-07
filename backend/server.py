@@ -2,7 +2,7 @@
 
 1. מגיש את ה-SPA (dist/).
 2. API לגיליונות + MCP ב-/mcp שדרכו גרוק מפרסם לבד: ניוזלטר (JSON/HTML/PDF) + פרקי פודקאסט + חומר NotebookLM לכל יום.
-3. כל יום נמחק אוטומטית אחרי RETENTION_DAYS (ברירת מחדל 14).
+3. כל יום נמחק אוטומטית אחרי RETENTION_DAYS (ברירת מחדל 30), האודיו שלו אחרי AUDIO_RETENTION_DAYS (7).
 4. כניסת Google (shared-auth): הקריאה פתוחה לכולם, ההעלאה והמחיקה — admin בלבד.
 """
 import asyncio

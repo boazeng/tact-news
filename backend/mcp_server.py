@@ -27,7 +27,7 @@ INSTRUCTIONS = (
     "THE NEWSLETTER IS BUILT BY CLAUDE (05:30 and 19:00 Israel time) — you do not publish it. Your part: "
     "the Facebook section (set_facebook_section), podcasts + NotebookLM audio (read the day's newsletter with "
     "get_newsletter as the material), YouTube, guides and papers. Check with get_status. All text in Hebrew. "
-    "Days are deleted automatically after 14 days. "
+    "Days are deleted automatically after 30 days; uploaded audio files after 7 days (podcast links stay). "
     "Some topics belong to another app, Longeviora (field app=\"longeviora\"): they are NOT shown on TACT News, "
     "each has lang (he/en — write in that language) and kind (news / promote), and review=true means nothing is "
     "public until Boaz approves the day. For kind=news: papers, podcasts and YouTube only (no Facebook). "

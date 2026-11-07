@@ -16,7 +16,8 @@ services:
     environment:
       AUTH_REDIRECT_URI: https://tact-news.newavera.co.il/auth/callback
       AUTH_SUPER_ADMIN_EMAIL: boazen@gmail.com
-      RETENTION_DAYS: "14"
+      RETENTION_DAYS: "30"
+      AUDIO_RETENTION_DAYS: "7"
       TZ: Asia/Jerusalem
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]

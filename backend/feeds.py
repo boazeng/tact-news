@@ -69,7 +69,7 @@ def _read_feed(src: dict) -> list[dict]:
     for e in feed.entries[:MAX_PER_FEED]:
         title = _clean(e.get("title", ""), 300)
         link = e.get("link", "")
-        if not title or not link or (flip and "flipboard.com" in link):  # פוסט שמתארח ב-Flipboard, לא כתבה
+        if not title or not link or (flip and ("flipboard.com" in link or "flip.it/" in link)):  # פוסט שמתארח ב-Flipboard, לא כתבה
             continue
         if gnews:  # "כותרת - שם המקור" → כותרת
             title = re.sub(r"\s+-\s+[^-]{2,60}$", "", title)

@@ -64,15 +64,18 @@ def _read_feed(src: dict) -> list[dict]:
     # חיפוש ב-Google News שאינו אתר אחד (נושא, או כמה site: עם OR) — שם המקור הוא תווית החיפוש,
     # אז לוקחים את שם האתר מהפריט
     by_outlet = gnews and src["url"].count("site%3A") + src["url"].count("site:") != 1
+    flip = "flipboard.com" in src["url"]   # נושא ב-Flipboard: האתר המקורי ב-<author>
     items = []
     for e in feed.entries[:MAX_PER_FEED]:
         title = _clean(e.get("title", ""), 300)
         link = e.get("link", "")
-        if not title or not link:
+        if not title or not link or (flip and "flipboard.com" in link):  # פוסט שמתארח ב-Flipboard, לא כתבה
             continue
         if gnews:  # "כותרת - שם המקור" → כותרת
             title = re.sub(r"\s+-\s+[^-]{2,60}$", "", title)
         outlet = _clean((e.get("source") or {}).get("title", ""), 80) if by_outlet else ""
+        if flip:
+            outlet = _clean(e.get("author", ""), 80)
         items.append({
             "source": outlet or src["name"], "title": title, "url": link, "gnews": gnews,
             "published": _when(e),
